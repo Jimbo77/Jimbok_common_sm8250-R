@@ -1967,11 +1967,6 @@ int __wil_up(struct wil6210_priv *wil)
 		return rc;
 
 	/* Rx RING. After MAC and beacon */
-	if (rx_ring_order == 0)
-		rx_ring_order = wil->hw_version < HW_VER_TALYN_MB ?
-			WIL_RX_RING_SIZE_ORDER_DEFAULT :
-			WIL_RX_RING_SIZE_ORDER_TALYN_DEFAULT;
-
 	rc = wil->txrx_ops.rx_init(wil, rx_ring_order);
 	if (rc)
 		return rc;
