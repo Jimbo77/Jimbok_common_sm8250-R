@@ -2,6 +2,18 @@
 /*
  * Copyright (c) 2012-2017 Qualcomm Atheros, Inc.
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <linux/interrupt.h>
@@ -584,11 +596,11 @@ irqreturn_t wil6210_irq_misc(int irq, void *cookie)
 
 	if (isr & BIT_DMA_EP_MISC_ICR_HALP) {
 		isr &= ~BIT_DMA_EP_MISC_ICR_HALP;
-		if (atomic_read(&wil->halp.handle_icr)) {
+		if (wil->halp.handle_icr) {
 			/* no need to handle HALP ICRs until next vote */
-			atomic_set(&wil->halp.handle_icr, 0);
+			wil->halp.handle_icr = false;
 			wil_dbg_irq(wil, "irq_misc: HALP IRQ invoked\n");
-			wil6210_mask_irq_misc(wil, true);
+			wil6210_mask_halp(wil);
 			complete(&wil->halp.comp);
 		}
 	}
