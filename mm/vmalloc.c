@@ -2215,8 +2215,8 @@ static void __vunmap(const void *addr, int deallocate_pages)
 			addr))
 		return;
 
-	va = find_vmap_area((unsigned long)addr);
-	if (unlikely(!va || !(va->flags & VM_VM_AREA))) {
+	area = find_vm_area(addr);
+	if (unlikely(!area)) {
 		WARN(1, KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n",
 				addr);
 		return;
