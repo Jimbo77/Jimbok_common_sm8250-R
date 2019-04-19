@@ -181,6 +181,9 @@ int devfreq_add_devbw(struct device *dev)
 		msm_bus_scale_unregister_client(d->bus_client);
 		return PTR_ERR(d->df);
 	}
+	
+	if (!strcmp(dev_name(dev), "soc:qcom,cpu-llcc-ddr-bw"))
+		devfreq_register_boost_device(DEVFREQ_MSM_CPUBW, d->df);
 
 	if (!strcmp(dev_name(dev), "soc:qcom,cpu-cpu-llcc-bw")) {
 		devfreq_register_boost_device(DEVFREQ_MSM_CPUBW, d->df);
