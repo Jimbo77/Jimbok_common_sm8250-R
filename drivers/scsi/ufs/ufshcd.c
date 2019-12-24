@@ -2896,11 +2896,14 @@ static void __ufshcd_hibern8_release(struct ufs_hba *hba, bool no_sched)
 
 static void ufshcd_hibern8_release(struct ufs_hba *hba, bool no_sched)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	__ufshcd_hibern8_release(hba, no_sched);
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	hba->lrb[task_tag].issue_time_stamp = ktime_get();
+	hba->lrb[task_tag].compl_time_stamp = ktime_set(0, 0);
+	ufshcd_add_command_trace(hba, task_tag, "send");
+	ufshcd_clk_scaling_start_busy(hba);
+	__set_bit(task_tag, &hba->outstanding_reqs);
+	ufshcd_writel(hba, 1 << task_tag, REG_UTP_TRANSFER_REQ_DOOR_BELL);
+	/* Make sure that doorbell is committed immediately */
+	wmb();
 }
 
 static void ufshcd_hibern8_enter_work(struct work_struct *work)
