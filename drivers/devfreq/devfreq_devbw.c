@@ -182,7 +182,7 @@ int devfreq_add_devbw(struct device *dev)
 		return PTR_ERR(d->df);
 	}
 	
-	if (!strcmp(dev_name(dev), "soc:qcom,cpu-llcc-ddr-bw"))
+	if (!strcmp(dev_name(dev), "soc:qcom,cpu-cpu-llcc-bw"))
 		devfreq_register_boost_device(DEVFREQ_MSM_CPUBW, d->df);
 
 	if (!strcmp(dev_name(dev), "soc:qcom,cpu-cpu-llcc-bw")) {
@@ -190,7 +190,7 @@ int devfreq_add_devbw(struct device *dev)
 		pr_info("Added devfreq boost device %s\n",dev_name(dev));
 	}
 	if (!strcmp(dev_name(dev), "soc:qcom,cpu-llcc-ddr-bw")) {
-		devfreq_register_boost_ddr_device(DEVFREQ_MSM_DDRBW, d->df);
+		devfreq_register_boost_device(DEVFREQ_MSM_LLCCBW, d->df);
 		pr_info("Added devfreq ddr boost device %s\n",dev_name(dev));
 	}
 	if (!strcmp(dev_name(dev), "soc:qcom,gpubw")) {
