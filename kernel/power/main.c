@@ -1217,7 +1217,10 @@ static int __init pm_start_workqueue(void)
 #ifdef CONFIG_SEC_PM
 static void handle_ws_work(struct work_struct *work)
 {
-	//wakeup_sources_stats_active();
+
+#ifdef CONFIG_SEC_PM_DEBUG
+	wakeup_sources_stats_active();
+#endif
 	schedule_delayed_work(&ws_work, msecs_to_jiffies(5000));
 }
 
