@@ -6127,15 +6127,9 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		goto vreg_deinit;
 	}
 
-	/*
-	 * To avoid polling and to avoid this R1b command conversion
-	 * to R1 command if the requested busy timeout > host's max
-	 * busy timeout in case of sanitize, erase or any R1b command
-	 */
-	host->mmc->max_busy_timeout = 0;
+	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 
-	msm_host->pltfm_init_done = true;
-
+	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, MSM_AUTOSUSPEND_DELAY_MS);
