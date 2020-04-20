@@ -5607,53 +5607,14 @@ out:
 	return len;
 }
 
-static DEVICE_ATTR(status, 0444, t_flash_detect_show, NULL);
-static DEVICE_ATTR(cd_cnt, 0444, sd_detect_cnt_show, NULL);
-static DEVICE_ATTR(max_mode, 0444, sd_detect_maxmode_show, NULL);
-static DEVICE_ATTR(current_mode, 0444, sd_detect_curmode_show, NULL);
-static DEVICE_ATTR(current_phase, 0444, sd_detect_curphase_show, NULL);
-static DEVICE_ATTR(sd_count, 0444, sd_count_show, NULL);
-static DEVICE_ATTR(sd_data, 0444, sd_data_show, NULL);
-static DEVICE_ATTR(sdcard_summary, 0444, sdcard_summary_show, NULL);
-static DEVICE_ATTR(data, 0444, sd_cid_show, NULL);
-static DEVICE_ATTR(fc, 0444, sd_health_show, NULL);
+static const struct sdhci_pltfm_data sdhci_msm_pdata = {
+	.quirks = SDHCI_QUIRK_BROKEN_CARD_DETECTION |
+		  SDHCI_QUIRK_SINGLE_POWER_WRITE |
+		  SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN |
+		  SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12,
 
-/* Callback function for SD Card IO Error */
-static int sdcard_uevent(struct mmc_card *card)
-{
-	pr_info("%s: Send Notification about SD Card IO Error\n", mmc_hostname(card->host));
-	return kobject_uevent(&t_flash_detect_dev->kobj, KOBJ_CHANGE);
-}
-
-static int sdhci_sec_sdcard_uevent(struct device *dev, struct kobj_uevent_env *env)
-{
-	struct sdhci_msm_host *msm_host = dev_get_drvdata(dev);
-	struct mmc_card *card = NULL;
-	int retval = 0;
-	bool card_exist = false;
-
-	add_uevent_var(env, "DEVNAME=%s", dev->kobj.name);
-
-	if (msm_host->mmc && msm_host->mmc->card) {
-		card_exist = true;
-		card = msm_host->mmc->card;
-	} else
-		card_exist = false;
-
-#if !defined(CONFIG_SEC_R3Q_PROJECT) && !defined(CONFIG_SEC_R5Q_PROJECT)
-	retval = add_uevent_var(env, "IOERROR=%s", card_exist ? (
-				((card->err_log[0].ge_cnt && !(card->err_log[0].ge_cnt % 1000)) ||
-				 (card->err_log[0].ecc_cnt && !(card->err_log[0].ecc_cnt % 1000)) ||
-				 (card->err_log[0].wp_cnt && !(card->err_log[0].wp_cnt % 100)) ||
-				 (card->err_log[0].oor_cnt && !(card->err_log[0].oor_cnt % 100)))
-				? "YES" : "NO")
-			: "NoCard");
-#endif
-	return retval;
-}
-
-static struct device_type sdcard_type = {
-	.uevent = sdhci_sec_sdcard_uevent,
+	.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
+	.ops = &sdhci_msm_ops,
 };
 #endif
 
