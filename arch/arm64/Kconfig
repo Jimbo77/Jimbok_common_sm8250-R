@@ -528,19 +528,19 @@ config ARM64_ERRATUM_1463225
 
 	  If unsure, say Y.
 
-config ARM64_ERRATUM_1542418
-	bool "Cortex-A77: The core might fetch a stale instuction, violating the ordering of instruction fetches"
+ARM64_ERRATUM_1542419
+	bool "Neoverse-N1: workaround mis-ordering of instruction fetches"
 	default y
 	help
-	  This option adds a workaround for Arm Cortex-A77 erratum 1542418.
+	  This option adds a workaround for ARM Neoverse-N1 erratum
+	  1542419.
 
-	  On the affected Cortex-A77 cores (r0p0 and r1p0), software relying
-	  on the prefetch-speculation-protection instead of explicit
-	  synchronisation may fetch a stale instruction from a CPU-specific
-	  cache. This violates the ordering rules for instruction fetches.
+	  Affected Neoverse-N1 cores could execute a stale instruction when
+	  modified by another CPU. The workaround depends on a firmware
+	  counterpart.
 
-	  Work around the erratum by ensuring that 60 ASIDs are selected
-	  before any ASID is reused.
+	  Workaround the issue by hiding the DIC feature from EL0. This
+	  forces user-space to perform cache maintenance.
 
 	  If unsure, say Y.
 
