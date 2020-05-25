@@ -2702,20 +2702,11 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba, bool no_sleep)
 	ufs_qcom_dump_regs(hba, REG_UFS_SYS1CLK_1US, 16,
 			"HCI Vendor Specific Registers ");
 	ufs_qcom_print_hw_debug_reg_all(hba, NULL, ufs_qcom_dump_regs_wrapper);
-
-	if (no_sleep)
-		return;
-
-	/* sleep a bit intermittently as we are dumping too much data */
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_testbus_read(hba);
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_print_unipro_testbus(hba);
-	usleep_range(1000, 1100);
-	ufs_qcom_print_utp_hci_testbus(hba);
-	usleep_range(1000, 1100);
-	ufs_qcom_phy_dbg_register_dump(phy);
-	usleep_range(1000, 1100);
+	udelay(1000);
 }
 
 /**
