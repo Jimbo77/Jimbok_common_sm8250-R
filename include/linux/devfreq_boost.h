@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0
- *
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
  * Copyright (C) 2018-2019 Sultan Alsawaf <sultan@kerneltoast.com>.
  */
 #ifndef _DEVFREQ_BOOST_H_
@@ -13,16 +13,21 @@ enum df_device {
 };
 
 #ifdef CONFIG_DEVFREQ_BOOST
-void devfreq_boost_kick(enum df_device device);
+void devfreq_boost_kick_flex(enum df_device device, unsigned int duration_ms);
 void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms);
+void devfreq_boost_kick_wake(enum df_device device, unsigned int duration_ms);
 void devfreq_register_boost_device(enum df_device device, struct devfreq *df);
 #else
 static inline
-void devfreq_boost_kick(enum df_device device)
+void devfreq_boost_kick_flex(enum df_device device, unsigned int duration_ms)
 {
 }
 static inline
 void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms)
+{
+}
+static inline
+void devfreq_boost_kick_wake(enum df_device device, unsigned int duration_ms)
 {
 }
 static inline

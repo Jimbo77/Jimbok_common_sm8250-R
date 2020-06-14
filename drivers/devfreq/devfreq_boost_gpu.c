@@ -4,9 +4,9 @@
  */
 // Copyright (C) 2019 all additions Erik Müller <pappschlumpf@xda>
 
-#define pr_fmt(fmt) "devfreq_boost: " fmt
+#define pr_fmt(fmt) "devfreq_boost_gpu: " fmt
 
-#include <linux/devfreq_boost.h>
+#include <linux/devfreq_boost_gpu.h>
 #ifdef CONFIG_DRM_MSM
 #include <linux/msm_drm_notify.h>
 #else
@@ -23,16 +23,16 @@
 #include <uapi/linux/sched/types.h>
 #endif
 
-static unsigned short flex_boost_duration __read_mostly = CONFIG_FLEX_DEVFREQ_BOOST_DURATION_MS;
-static unsigned short input_boost_duration __read_mostly = CONFIG_DEVFREQ_INPUT_BOOST_DURATION_MS;
-static unsigned int devfreq_thread_prio __read_mostly = CONFIG_DEVFREQ_THREAD_PRIORITY;
-static unsigned int devfreq_boost_freq_low  __read_mostly = CONFIG_DEVFREQ_MSM_CPUBW_BOOST_FREQ_LOW;
-static unsigned int devfreq_boost_freq __read_mostly = CONFIG_DEVFREQ_MSM_CPUBW_BOOST_FREQ;
+static unsigned short flex_boost_gpu_duration __read_mostly = CONFIG_FLEX_DEVFREQ_BOOST_GPU_DURATION_MS;
+static unsigned short input_boost_gpu_duration __read_mostly = CONFIG_DEVFREQ_INPUT_BOOST_GPU_DURATION_MS;
+static unsigned int devfreq_thread_prio __read_mostly = CONFIG_DEVFREQ_GPU_THREAD_PRIORITY;
+static unsigned int devfreq_boost_gpu_freq_low  __read_mostly = CONFIG_DEVFREQ_MSM_GPUBW_BOOST_FREQ_LOW;
+static unsigned int devfreq_boost_gpu_freq __read_mostly = CONFIG_DEVFREQ_MSM_GPUBW_BOOST_FREQ;
 
-module_param(flex_boost_duration, short, 0644);
-module_param(input_boost_duration, short, 0644);
-module_param(devfreq_boost_freq, uint, 0644);
-module_param(devfreq_boost_freq_low, uint, 0644);
+module_param(flex_boost_gpu_duration, short, 0644);
+module_param(input_boost_gpu_duration, short, 0644);
+module_param(devfreq_boost_gpu_freq, uint, 0644);
+module_param(devfreq_boost_gpu_freq_low, uint, 0644);
 
 enum {
 	SCREEN_ON,
@@ -56,7 +56,7 @@ struct boost_dev {
 };
 
 struct df_boost_drv {
-	struct boost_dev devices[DEVFREQ_MAX];
+	struct boost_dev devices[DEVFREQ_MAX_GPU];
 #ifdef CONFIG_DRM_MSM
 	struct notifier_block msm_drm_notif;
 #else
@@ -83,16 +83,16 @@ static void devfreq_flex_unboost(struct work_struct *work);
 }
 
 static struct df_boost_drv df_boost_drv_g __read_mostly = {
-	BOOST_DEV_INIT(df_boost_drv_g, DEVFREQ_MSM_CPUBW)
+	BOOST_DEV_INIT(df_boost_drv_g, DEVFREQ_MSM_GPUBW)
 };
 
-static void __devfreq_boost_kick(struct boost_dev *b)
+static void __devfreq_boost_gpu_kick(struct boost_dev *b)
 {
 	if (!READ_ONCE(b->df) || !test_bit(SCREEN_ON, &b->state))
 		return;
 
 	if (!mod_delayed_work(b->wq_i, &b->input_unboost,
-			msecs_to_jiffies(input_boost_duration))) {
+			msecs_to_jiffies(input_boost_gpu_duration))) {
 		set_bit(INPUT_BOOST, &b->state);
 		wake_up(&b->boost_waitq);
 	}
@@ -100,9 +100,9 @@ static void __devfreq_boost_kick(struct boost_dev *b)
 
 static void __devfreq_boost_kick_flex(struct boost_dev *b, unsigned int duration_ms)
 {
-	unsigned int act_duration_ms = flex_boost_duration;
+	unsigned int act_duration_ms = flex_boost_gpu_duration;
 
-	if (!READ_ONCE(b->df) || !test_bit(SCREEN_ON, &b->state) || ((flex_boost_duration == 0) && (duration_ms == 0)))
+	if (!READ_ONCE(b->df) || !test_bit(SCREEN_ON, &b->state) || ((flex_boost_gpu_duration == 0) && (duration_ms == 0)))
 		return;
 
 	if (duration_ms > 0)
@@ -115,7 +115,7 @@ static void __devfreq_boost_kick_flex(struct boost_dev *b, unsigned int duration
 	}
 }
 
-void devfreq_boost_kick_flex(enum df_device device, unsigned int duration_ms)
+void devfreq_boost_gpu_kick_flex(enum df_device_gpu device, unsigned int duration_ms)
 {
 	struct df_boost_drv *d = &df_boost_drv_g;
 
@@ -138,7 +138,7 @@ static void __devfreq_boost_kick_max(struct boost_dev *b,
 	}
 }
 
-void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms)
+void devfreq_boost_gpu_kick_max(enum df_device_gpu device, unsigned int duration_ms)
 {
 	struct df_boost_drv *d = &df_boost_drv_g;
 	struct boost_dev *b = d->devices + device;
@@ -162,7 +162,7 @@ static void __devfreq_boost_kick_wake(struct boost_dev *b,
 	}
 }
 
-void devfreq_boost_kick_wake(enum df_device device, unsigned int duration_ms)
+void devfreq_boost_gpu_kick_wake(enum df_device_gpu device, unsigned int duration_ms)
 {
 	struct df_boost_drv *d = &df_boost_drv_g;
 	struct boost_dev *b = d->devices + device;
@@ -170,7 +170,7 @@ void devfreq_boost_kick_wake(enum df_device device, unsigned int duration_ms)
 	__devfreq_boost_kick_wake(b, duration_ms);
 }
 
-void devfreq_register_boost_device(enum df_device device, struct devfreq *df)
+void devfreq_register_boost_gpu_device(enum df_device_gpu device, struct devfreq *df)
 {
 	struct df_boost_drv *d = &df_boost_drv_g;
 	struct boost_dev *b;
@@ -224,10 +224,10 @@ static void devfreq_update_boosts(struct boost_dev *b, unsigned long state)
 	} else {
 		mutex_lock(&df->lock);
 		df->min_freq = 0x04 & state ?
-			devfreq_boost_freq_low :
+			devfreq_boost_gpu_freq_low :
 			df->profile->freq_table[0];
 		df->min_freq = 0x02 & state ?
-			devfreq_boost_freq :
+			devfreq_boost_gpu_freq :
 			df->profile->freq_table[0];
 			df->max_boost = 0x10 & state;
 		update_devfreq(df);
@@ -274,11 +274,11 @@ static int msm_drm_notifier_cb(struct notifier_block *nb, unsigned long action,
 		return NOTIFY_OK;
 
 	/* Boost when the screen turns on and unboost when it turns off */
-	for (i = 0; i < DEVFREQ_MAX; i++) {
+	for (i = 0; i < DEVFREQ_MAX_GPU; i++) {
 		struct boost_dev *b = d->devices + i;
 
 		if (*blank == MSM_DRM_BLANK_UNBLANK_CUST) {
-			devfreq_boost_kick_wake(DEVFREQ_MSM_CPUBW, 1000);
+			devfreq_boost_gpu_kick_wake(DEVFREQ_MSM_GPUBW, 1000);
 			set_bit(SCREEN_ON, &b->state);
 		} else if (*blank == MSM_DRM_BLANK_POWERDOWN_CUST) {
 			clear_bit(SCREEN_ON, &b->state);
@@ -305,7 +305,7 @@ static int fb_notifier_cb(struct notifier_block *nb, unsigned long action,
 		return NOTIFY_OK;
 
 	/* Boost when the screen turns on and unboost when it turns off */
-	for (i = 0; i < DEVFREQ_MAX; i++) {
+	for (i = 0; i < DEVFREQ_MAX_GPU; i++) {
 		struct boost_dev *b = d->devices + i;
 
 		if (*blank == FB_BLANK_UNBLANK) {
@@ -325,18 +325,18 @@ static int fb_notifier_cb(struct notifier_block *nb, unsigned long action,
 }
 #endif
 
-static void devfreq_boost_input_event(struct input_handle *handle,
+static void devfreq_boost_gpu_input_event(struct input_handle *handle,
 				      unsigned int type, unsigned int code,
 				      int value)
 {
 	struct df_boost_drv *d = handle->handler->private;
 	int i;
 
-	for (i = 0; i < DEVFREQ_MAX; i++)
-		__devfreq_boost_kick(d->devices + i);
+	for (i = 0; i < DEVFREQ_MAX_GPU; i++)
+		__devfreq_boost_gpu_kick(d->devices + i);
 }
 
-static int devfreq_boost_input_connect(struct input_handler *handler,
+static int devfreq_boost_gpu_input_connect(struct input_handler *handler,
 				       struct input_dev *dev,
 				       const struct input_device_id *id)
 {
@@ -349,7 +349,7 @@ static int devfreq_boost_input_connect(struct input_handler *handler,
 
 	handle->dev = dev;
 	handle->handler = handler;
-	handle->name = "devfreq_boost_handle";
+	handle->name = "devfreq_boost_gpu_handle";
 
 	ret = input_register_handle(handle);
 	if (ret)
@@ -368,14 +368,14 @@ free_handle:
 	return ret;
 }
 
-static void devfreq_boost_input_disconnect(struct input_handle *handle)
+static void devfreq_boost_gpu_input_disconnect(struct input_handle *handle)
 {
 	input_close_device(handle);
 	input_unregister_handle(handle);
 	kfree(handle);
 }
 
-static const struct input_device_id devfreq_boost_ids[] = {
+static const struct input_device_id devfreq_boost_gpu_ids[] = {
 	/* Multi-touch touchscreen */
 	{
 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
@@ -401,28 +401,28 @@ static const struct input_device_id devfreq_boost_ids[] = {
 	{ }
 };
 
-static struct input_handler devfreq_boost_input_handler = {
-	.event		= devfreq_boost_input_event,
-	.connect	= devfreq_boost_input_connect,
-	.disconnect	= devfreq_boost_input_disconnect,
-	.name		= "devfreq_boost_handler",
-	.id_table	= devfreq_boost_ids
+static struct input_handler devfreq_boost_gpu_input_handler = {
+	.event		= devfreq_boost_gpu_input_event,
+	.connect	= devfreq_boost_gpu_input_connect,
+	.disconnect	= devfreq_boost_gpu_input_disconnect,
+	.name		= "devfreq_boost_gpu_handler",
+	.id_table	= devfreq_boost_gpu_ids
 };
 
-static int __init devfreq_boost_init(void)
+static int __init devfreq_boost_gpu_init(void)
 {
 	struct df_boost_drv *d = &df_boost_drv_g;
-	struct task_struct *thread[DEVFREQ_MAX];
+	struct task_struct *thread[DEVFREQ_MAX_GPU];
 	int i, ret;
 
-	for (i = 0; i < DEVFREQ_MAX; i++) {
+	for (i = 0; i < DEVFREQ_MAX_GPU; i++) {
 		struct boost_dev *b = d->devices + i;
-		b->wq_i = alloc_workqueue("devfreq_boost_wq_i", WQ_POWER_EFFICIENT, 0);
-		b->wq_f = alloc_workqueue("devfreq_boost_wq_f", WQ_POWER_EFFICIENT, 0);
-		b->wq_m = alloc_workqueue("devfreq_boost_wq_m", WQ_POWER_EFFICIENT, 0);
+		b->wq_i = alloc_workqueue("devfreq_boost_gpu_wq_i", WQ_POWER_EFFICIENT, 0);
+		b->wq_f = alloc_workqueue("devfreq_boost_gpu_wq_f", WQ_POWER_EFFICIENT, 0);
+		b->wq_m = alloc_workqueue("devfreq_boost_gpu_wq_m", WQ_POWER_EFFICIENT, 0);
 		
 		thread[i] = kthread_run_low_power(devfreq_boost_thread, b,
-						      "devfreq_boostd/%d", i);
+						      "devfreq_boost_gpud/%d", i);
 		if (IS_ERR(thread[i])) {
 			ret = PTR_ERR(thread[i]);
 			pr_err("Failed to create kthread, err: %d\n", ret);
@@ -431,8 +431,8 @@ static int __init devfreq_boost_init(void)
 		set_bit(SCREEN_ON, &b->state);
 	}
 
-	devfreq_boost_input_handler.private = d;
-	ret = input_register_handler(&devfreq_boost_input_handler);
+	devfreq_boost_gpu_input_handler.private = d;
+	ret = input_register_handler(&devfreq_boost_gpu_input_handler);
 	if (ret) {
 		pr_err("Failed to register input handler, err: %d\n", ret);
 		goto stop_kthreads;
@@ -458,10 +458,10 @@ static int __init devfreq_boost_init(void)
 	return 0;
 
 unregister_handler:
-	input_unregister_handler(&devfreq_boost_input_handler);
+	input_unregister_handler(&devfreq_boost_gpu_input_handler);
 stop_kthreads:
 	while (i--)
 		kthread_stop(thread[i]);
 	return ret;
 }
-late_initcall(devfreq_boost_init);
+late_initcall(devfreq_boost_gpu_init);
