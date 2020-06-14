@@ -24,6 +24,8 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 #include <linux/devfreq_boost.h>
+#include <linux/devfreq_boost_ddr.h>
+#include <linux/devfreq_boost_gpu.h>
 
 /* Has to be ULL to prevent overflow where this macro is used. */
 #define MBYTE (1ULL << 20)

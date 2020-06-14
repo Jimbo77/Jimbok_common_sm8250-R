@@ -309,7 +309,7 @@ static int fb_notifier_cb(struct notifier_block *nb, unsigned long action,
 		struct boost_dev *b = d->devices + i;
 
 		if (*blank == FB_BLANK_UNBLANK) {
-			devfreq_boost_kick_wake(DEVFREQ_MSM_CPUBW, 1000);
+			devfreq_boost_gpu_kick_wake(DEVFREQ_MSM_GPUBW, 1000);
 			set_bit(SCREEN_ON, &b->state);
 		} else {
 			clear_bit(SCREEN_ON, &b->state);
@@ -317,6 +317,7 @@ static int fb_notifier_cb(struct notifier_block *nb, unsigned long action,
 			clear_bit(MAX_BOOST, &b->state);
 			clear_bit(FLEX_BOOST, &b->state);
 			clear_bit(INPUT_BOOST, &b->state);
+			pr_info("Screen off, boosts turned off\n");
 			wake_up(&b->boost_waitq);
 		}
 	}
