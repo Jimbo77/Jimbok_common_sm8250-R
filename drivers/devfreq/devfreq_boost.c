@@ -125,9 +125,6 @@ void devfreq_boost_kick_flex(enum df_device device, unsigned int duration_ms)
 static void __devfreq_boost_kick_max(struct boost_dev *b,
 				     unsigned int duration_ms)
 {
-	unsigned long boost_jiffies = msecs_to_jiffies(duration_ms);
-	unsigned long curr_expires, new_expires;
-
 	if (!READ_ONCE(b->df) || !test_bit(SCREEN_ON, &b->state))
 		return;
 
@@ -149,9 +146,6 @@ void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms)
 static void __devfreq_boost_kick_wake(struct boost_dev *b,
 				     unsigned int duration_ms)
 {
-	unsigned long boost_jiffies = msecs_to_jiffies(duration_ms);
-	unsigned long curr_expires, new_expires;
-
 	if (!READ_ONCE(b->df))
 		return;
 
