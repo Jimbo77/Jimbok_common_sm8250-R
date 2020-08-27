@@ -1291,136 +1291,9 @@ void sdhci_msm_mm_dbg_configure(struct sdhci_host *host, u32 mask,
 static ssize_t show_mask_and_match(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct sdhci_host *host = dev_get_drvdata(dev);
-
-	if (!host)
-		return -EINVAL;
-
-	pr_info("%s: M&M show func\n", mmc_hostname(host->mmc));
-
-	return 0;
-}
-
-static ssize_t store_mask_and_match(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct sdhci_host *host = dev_get_drvdata(dev);
-	unsigned long value;
-	char *token;
-	int i = 0;
-	u32 mask = 0, match = 0, bit_shift = 0, testbus = 0;
-
-	char *temp = (char *)buf;
-
-	if (!host)
-		return -EINVAL;
-
-	while ((token = strsep(&temp, " "))) {
-		kstrtoul(token, 0, &value);
-		if (i == 0)
-			mask = value;
-		else if (i == 1)
-			match = value;
-		else if (i == 2)
-			bit_shift = value;
-		else if (i == 3) {
-			testbus = value;
-			break;
-		}
-		i++;
-	}
-
-	pr_info("%s: M&M parameter passed are: %d %d %d %d\n",
-		mmc_hostname(host->mmc), mask, match, bit_shift, testbus);
-	pm_runtime_get_sync(dev);
-	sdhci_msm_mm_dbg_configure(host, mask, match, bit_shift, testbus);
-	pm_runtime_put_sync(dev);
-
-	pr_debug("%s: M&M debug enabled.\n", mmc_hostname(host->mmc));
-	return count;
-}
-
-/* Enter sdcc debug mode */
-void sdhci_msm_enter_dbg_mode(struct sdhci_host *host)
-{
-	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
-	struct sdhci_msm_host *msm_host = pltfm_host->priv;
-	struct platform_device *pdev = msm_host->pdev;
-	u32 enable_dbg_feature = 0;
-	u32 minor;
-
-	minor = IPCAT_MINOR_MASK(readl_relaxed(host->ioaddr +
-				SDCC_IP_CATALOG));
-	if (minor < 2 || msm_host->debug_mode_enabled)
-		return;
-	if (!(host->quirks2 & SDHCI_QUIRK2_USE_DBG_FEATURE))
-		return;
-
-	/* Enable debug mode */
-	writel_relaxed(ENABLE_DBG,
-			host->ioaddr + SDCC_TESTBUS_CONFIG);
-	writel_relaxed(DUMMY,
-			host->ioaddr + SDCC_DEBUG_EN_DIS_REG);
-	writel_relaxed((readl_relaxed(host->ioaddr +
-			SDCC_TESTBUS_CONFIG) | TESTBUS_EN),
-			host->ioaddr + SDCC_TESTBUS_CONFIG);
-
-	if (minor >= 2)
-		enable_dbg_feature |= FSM_HISTORY |
-			AUTO_RECOVERY_DISABLE |
-			MM_TRIGGER_DISABLE |
-			IIB_EN;
-
-	/* Enable particular feature */
-	writel_relaxed((readl_relaxed(host->ioaddr +
-			SDCC_DEBUG_FEATURE_CFG_REG) | enable_dbg_feature),
-			host->ioaddr + SDCC_DEBUG_FEATURE_CFG_REG);
-
-	/* Read back to ensure write went through */
-	readl_relaxed(host->ioaddr +
-			SDCC_DEBUG_FEATURE_CFG_REG);
-	msm_host->debug_mode_enabled = true;
-
-	dev_info(&pdev->dev, "Debug feature enabled 0x%08x\n",
-			readl_relaxed(host->ioaddr +
-			SDCC_DEBUG_FEATURE_CFG_REG));
-}
-
-/* Exit sdcc debug mode */
-void sdhci_msm_exit_dbg_mode(struct sdhci_host *host)
-{
-	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
-	struct sdhci_msm_host *msm_host = pltfm_host->priv;
-	struct platform_device *pdev = msm_host->pdev;
-	u32 minor;
-
-	minor = IPCAT_MINOR_MASK(readl_relaxed(host->ioaddr +
-				SDCC_IP_CATALOG));
-	if (minor < 2 || !msm_host->debug_mode_enabled)
-		return;
-	if (!(host->quirks2 & SDHCI_QUIRK2_USE_DBG_FEATURE))
-		return;
-
-	/* Exit debug mode */
-	writel_relaxed(DISABLE_DBG,
-			host->ioaddr + SDCC_TESTBUS_CONFIG);
-	writel_relaxed(DUMMY,
-			host->ioaddr + SDCC_DEBUG_EN_DIS_REG);
-
-	msm_host->debug_mode_enabled = false;
-
-	dev_dbg(&pdev->dev, "Debug feature disabled 0x%08x\n",
-			readl_relaxed(host->ioaddr +
-			SDCC_DEBUG_FEATURE_CFG_REG));
-}
-
-int sdhci_msm_execute_tuning(struct sdhci_host *host, u32 opcode)
-{
-	unsigned long flags;
-	int tuning_seq_cnt = 3;
-	u8 phase, *data_buf, tuned_phases[NUM_TUNING_PHASES], tuned_phase_cnt;
-	const u32 *tuning_block_pattern = tuning_block_64;
-	int size = sizeof(tuning_block_64); /* Tuning pattern size in bytes */
+	struct sdhci_host *host = mmc_priv(mmc);
+	int tuning_seq_cnt = 10;
+	u8 phase, tuned_phases[16], tuned_phase_cnt = 0;
 	int rc;
 	struct mmc_host *mmc = host->mmc;
 	struct mmc_ios	ios = host->mmc->ios;
@@ -1626,6 +1499,22 @@ retry:
 		sdhci_msm_set_mmc_drv_type(host, opcode, 0);
 
 	if (tuned_phase_cnt) {
+		if (tuned_phase_cnt == ARRAY_SIZE(tuned_phases)) {
+			/*
+			 * All phases valid is _almost_ as bad as no phases
+			 * valid.  Probably all phases are not really reliable
+			 * but we didn't detect where the unreliable place is.
+			 * That means we'll essentially be guessing and hoping
+			 * we get a good phase.  Better to try a few times.
+			 */
+			dev_dbg(mmc_dev(mmc), "%s: All phases valid; try again\n",
+				mmc_hostname(mmc));
+			if (--tuning_seq_cnt) {
+				tuned_phase_cnt = 0;
+				goto retry;
+			}
+		}
+
 		rc = msm_find_most_appropriate_phase(host, tuned_phases,
 							tuned_phase_cnt);
 		if (rc < 0)
