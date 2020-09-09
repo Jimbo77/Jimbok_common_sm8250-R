@@ -552,7 +552,7 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	struct qrtr_hdr_v1 *hdr;
 	int confirm_rx;
 	size_t len = skb->len;
-	int rc = -ENODEV;
+	int rc;
 
 	if (!atomic_read(&node->hello_sent) && type != QRTR_TYPE_HELLO) {
 		kfree_skb(skb);
@@ -590,35 +590,17 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	hdr->size = cpu_to_le32(len);
 	hdr->confirm_rx = !!confirm_rx;
 
-	qrtr_log_tx_msg(node, hdr, skb);
 	rc = skb_put_padto(skb, ALIGN(len, 4) + sizeof(*hdr));
-	if (rc) {
-		pr_err("%s: failed to pad size %lu to %lu rc:%d\n", __func__,
-		       len, ALIGN(len, 4) + sizeof(*hdr), rc);
-		return rc;
+
+	if (!rc) {
+		mutex_lock(&node->ep_lock);
+		rc = -ENODEV;
+		if (node->ep)
+			rc = node->ep->xmit(node->ep, skb);
+		else
+			kfree_skb(skb);
+		mutex_unlock(&node->ep_lock);
 	}
-
-	mutex_lock(&node->ep_lock);
-	if (node->ep)
-		rc = node->ep->xmit(node->ep, skb);
-	else
-		kfree_skb(skb);
-	mutex_unlock(&node->ep_lock);
-
-	if (!rc && type == QRTR_TYPE_HELLO)
-		atomic_inc(&node->hello_sent);
-
-	if (rc) {
-		struct qrtr_tx_flow *flow;
-		unsigned long key = (u64)to->sq_node << 32 | to->sq_port;
-
-		mutex_lock(&node->qrtr_tx_lock);
-		flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
-		if (flow)
-			atomic_dec(&flow->pending);
-		mutex_unlock(&node->qrtr_tx_lock);
-	}
-
 	return rc;
 }
 
