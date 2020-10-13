@@ -1772,82 +1772,23 @@ static __always_inline void delayed_free_task(struct task_struct *tsk)
 		free_task(tsk);
 }
 
-static int pidfd_release(struct inode *inode, struct file *file)
+static void copy_oom_score_adj(u64 clone_flags, struct task_struct *tsk)
 {
-	struct pid *pid = file->private_data;
+	/* Skip if kernel thread */
+	if (!tsk->mm)
+		return;
 
-	file->private_data = NULL;
-	put_pid(pid);
-	return 0;
-}
+	/* Skip if spawning a thread or using vfork */
+	if ((clone_flags & (CLONE_VM | CLONE_THREAD | CLONE_VFORK)) != CLONE_VM)
+		return;
 
-#ifdef CONFIG_PROC_FS
-static void pidfd_show_fdinfo(struct seq_file *m, struct file *f)
-{
-	struct pid_namespace *ns = proc_pid_ns(file_inode(m->file));
-	struct pid *pid = f->private_data;
-
-	seq_put_decimal_ull(m, "Pid:\t", pid_nr_ns(pid, ns));
-	seq_putc(m, '\n');
-}
-#endif
-
-/*
- * Poll support for process exit notification.
- */
-static unsigned int pidfd_poll(struct file *file, struct poll_table_struct *pts)
-{
-	struct task_struct *task;
-	struct pid *pid = file->private_data;
-	int poll_flags = 0;
-
-	poll_wait(file, &pid->wait_pidfd, pts);
-
-	rcu_read_lock();
-	task = pid_task(pid, PIDTYPE_PID);
-	/*
-	 * Inform pollers only when the whole thread group exits.
-	 * If the thread group leader exits before all other threads in the
-	 * group, then poll(2) should block, similar to the wait(2) family.
-	 */
-	if (!task || (task->exit_state && thread_group_empty(task)))
-		poll_flags = POLLIN | POLLRDNORM;
-	rcu_read_unlock();
-
-	return poll_flags;
-}
-
-const struct file_operations pidfd_fops = {
-	.release = pidfd_release,
-	.poll = pidfd_poll,
-#ifdef CONFIG_PROC_FS
-	.show_fdinfo = pidfd_show_fdinfo,
-#endif
-};
-
-/**
- * pidfd_create() - Create a new pid file descriptor.
- *
- * @pid:  struct pid that the pidfd will reference
- *
- * This creates a new pid file descriptor with the O_CLOEXEC flag set.
- *
- * Note, that this function can only be called after the fd table has
- * been unshared to avoid leaking the pidfd to the new process.
- *
- * Return: On success, a cloexec pidfd is returned.
- *         On error, a negative errno number will be returned.
- */
-static int pidfd_create(struct pid *pid)
-{
-	int fd;
-
-	fd = anon_inode_getfd("[pidfd]", &pidfd_fops, get_pid(pid),
-			      O_RDWR | O_CLOEXEC);
-	if (fd < 0)
-		put_pid(pid);
-
-	return fd;
+	/* We need to synchronize with __set_oom_adj */
+	mutex_lock(&oom_adj_mutex);
+	set_bit(MMF_MULTIPROCESS, &tsk->mm->flags);
+	/* Update the values in case they were changed after copy_signal */
+	tsk->signal->oom_score_adj = current->signal->oom_score_adj;
+	tsk->signal->oom_score_adj_min = current->signal->oom_score_adj_min;
+	mutex_unlock(&oom_adj_mutex);
 }
 
 /*
@@ -2342,10 +2283,9 @@ static __latent_entropy struct task_struct *copy_process(
 
 	trace_task_newtask(p, clone_flags);
 	uprobe_copy_process(p, clone_flags);
-#ifdef CONFIG_KDP_CRED
-	if(rkp_cred_enable)
-		rkp_assign_pgd(p);
-#endif
+
+	copy_oom_score_adj(clone_flags, p);
+
 	return p;
 
 bad_fork_cancel_cgroup:
