@@ -205,6 +205,32 @@ void dsi_rect_intersect(const struct dsi_rect *r1,
 	}
 }
 
+
+/*
+maxX = 1084
+minX = 65
+minX2 = 6
+
+minXDiff = minX-minX2 = 60
+
+percentage = ((maxX - bl_lvl)) * 100) / maxX    (0% at max brightness, 100% at min)
+calcDiff = minXDiff * percentage (at min 60, at max 0, in the middle lvl 30)
+*/
+#define MAX_BL_LVL 1084
+#define MIN_BL_LVL 65
+
+static u64 calc_bl_dimming(u64 bl_lvl) {
+	int percentage = ((MAX_BL_LVL - bl_lvl) * 100)/ MAX_BL_LVL;
+	int minXDiff = MIN_BL_LVL - backlight_min;
+	int calcDiff = (minXDiff * percentage) / 100;
+	u64 ret = bl_lvl - calcDiff;
+	if (percentage <=0) ret = bl_lvl; // MAX_BL_LVL is not correct in code, let's keep original lvl
+	if (minXDiff <= 0) ret = bl_lvl; // backlight_min is higher than MIN_BL_LVL! let's keep original lvl, don't boost it
+	pr_info("%s [cleanslate] backlight dimmer calc: orig: %u percentage: %d minXDiff: %d calcdiff: %d result_lvl: %u\n",__func__, bl_lvl, percentage, minXDiff, calcDiff, ret);
+	return ret;
+}
+
+extern int aod_layer_hide;
 int dsi_display_set_backlight(struct drm_connector *connector,
 		void *display, u32 bl_lvl)
 {
@@ -250,6 +276,23 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	bl_scale_sv = panel->bl_config.bl_scale_sv;
 	bl_temp = (u32)bl_temp * bl_scale_sv / MAX_SV_BL_SCALE_LEVEL;
 
+<<<<<<< HEAD
+=======
+#ifdef CONFIG_UCI
+	DSI_INFO("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
+		bl_scale, bl_scale_sv, (u32)bl_temp);
+	if (primary_display!=NULL && display == primary_display && bl_temp > 0) {
+		if (backlight_dimmer) {
+			bl_temp = calc_bl_dimming(bl_temp);
+			if (bl_temp < backlight_min) bl_temp = backlight_min;
+			DSI_INFO("[cleanslate] backlight dimmer: backlight_min %d, bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
+				backlight_min, bl_scale, bl_scale_sv, (u32)bl_temp);
+		}
+		last_brightness = bl_lvl;
+		first_brightness_set = true;
+	}
+#else
+>>>>>>> 12b983799d2e... uci: backlight dimmer: smoothen the dimming changes thru the whol range
 	DSI_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
