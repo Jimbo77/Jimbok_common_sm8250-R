@@ -426,7 +426,6 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wno-trigraphs \
 		   -Wno-implicit-function-declaration \
 		   -Wno-format-security \
 		   -Wno-misleading-indentation \
-		   -Wno-void-pointer-to-enum-cast \
 		   -Wno-strict-prototypes \
 		   -Wno-ignored-optimization-argument \
 		   -Wno-pointer-to-int-cast \
