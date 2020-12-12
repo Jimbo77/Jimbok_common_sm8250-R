@@ -21,7 +21,7 @@ BUILD_CROSS_COMPILE=$(pwd)/toolchains/aarch64-linux-android-4.9/bin/aarch64-linu
 KERNEL_LLVM_BIN=$(pwd)/toolchains/llvm-arm-toolchain-ship-10.0/bin/clang
 CLANG_TRIPLE=aarch64-linux-gnu-
 
-KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y VARIANT_DEFCONFIG=vendor/$1/kona_sec_$1_usa_singlew_defconfig"
+KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc VARIANT_DEFCONFIG=vendor/$1/kona_sec_$1_usa_singlew_defconfig"
 
 # If not cleaning the tree between builds, the following command will be
 # required on 2nd and subsequent builds to prevent a huge slowdown of the
