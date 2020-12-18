@@ -276,6 +276,9 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	bl_scale_sv = panel->bl_config.bl_scale_sv;
 	bl_temp = (u32)bl_temp * bl_scale_sv / MAX_SV_BL_SCALE_LEVEL;
 
+<<<<<<< HEAD
+=======
+#ifdef CONFIG_UCI
 	DSI_INFO("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
 	if (primary_display!=NULL && display == primary_display && bl_temp > 0) {
@@ -288,6 +291,8 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 		last_brightness = bl_lvl;
 		first_brightness_set = true;
 	}
+#else
+>>>>>>> 12b983799d2e... uci: backlight dimmer: smoothen the dimming changes thru the whol range
 	DSI_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
