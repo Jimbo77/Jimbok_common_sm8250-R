@@ -204,8 +204,7 @@ static void match_rule(struct rule_update_path_info *inp_node,
 		for (i = 0; i < rule->num_src; i++) {
 			if (rule->src_info[i].id != inp_node->id)
 				continue;
-				
-			if (check_rule(rule, inp_node)) {
+
 				if (rule->state ==
 					RULE_STATE_NOT_APPLIED)
 					rule->state_change = true;
