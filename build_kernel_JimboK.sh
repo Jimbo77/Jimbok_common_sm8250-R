@@ -2,7 +2,6 @@
 
 CHIPSET_NAME=kona
 VARIANT=$1
-VERSION=$2
 
 rm -rf out
 
@@ -45,11 +44,10 @@ cat ${DTS_DIR}/vendor/qcom/*.dtb > $(pwd)/out/dtb.img
 
 $(pwd)/tools/mkdtimg create $(pwd)/out/dtbo.img --page_size=4096 ${DTBO_FILES}
 
-mv $(pwd)/out/Image.gz $(pwd)/out/Image-JimboK_$1.gz
-mv $(pwd)/out/dtb.img $(pwd)/out/dtb-JimboK_$1.img
+mv $(pwd)/out/Image.gz $(pwd)/out/Image.gz
+mv $(pwd)/out/dtb.img $(pwd)/out/dtb.img
 
-cp $(pwd)/out/Image-JimboK_$1.gz ~/build/mkbootimg-R
-cp $(pwd)/out/dtb-JimboK_$1.img ~/build/mkbootimg-R
-cp $(pwd)/out/Image.gz-dtb ~/build/mkbootimg-R
+cp $(pwd)/out/Image.gz ~/build/OFRP/samsung/$1/prebuilt
+cp $(pwd)/out/dtb.img ~/build/OFRP/samsung/$1/prebuilt
 
-~/build/mkbootimg-R/make_boot_$1.sh $2-$1
+
