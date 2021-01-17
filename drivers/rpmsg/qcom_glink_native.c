@@ -1147,56 +1147,7 @@ static int qcom_glink_rx_open_ack(struct qcom_glink *glink, unsigned int lcid)
 		return -EINVAL;
 	}
 
-	CH_INFO(channel, "\n");
 	complete_all(&channel->open_ack);
-
-	return 0;
-}
-
-/**
- * qcom_glink_send_signals() - convert a signal  cmd to wire format and transmit
- * @glink:	The transport to transmit on.
- * @channel:	The glink channel
- * @sigs:	The signals to encode.
- *
- * Return: 0 on success or standard Linux error code.
- */
-static int qcom_glink_send_signals(struct qcom_glink *glink,
-				   struct glink_channel *channel,
-				   u32 sigs)
-{
-	struct glink_msg msg;
-
-	msg.cmd = cpu_to_le16(RPM_CMD_SIGNALS);
-	msg.param1 = cpu_to_le16(channel->lcid);
-	msg.param2 = cpu_to_le32(sigs);
-
-	GLINK_INFO(glink->ilc, "sigs:%d\n", sigs);
-	return qcom_glink_tx(glink, &msg, sizeof(msg), NULL, 0, true);
-}
-
-static int qcom_glink_handle_signals(struct qcom_glink *glink,
-				     unsigned int rcid, unsigned int signals)
-{
-	struct glink_channel *channel;
-	unsigned long flags;
-	u32 old;
-
-	spin_lock_irqsave(&glink->idr_lock, flags);
-	channel = idr_find(&glink->rcids, rcid);
-	spin_unlock_irqrestore(&glink->idr_lock, flags);
-	if (!channel) {
-		dev_err(glink->dev, "signal for non-existing channel\n");
-		return -EINVAL;
-	}
-
-	old = channel->rsigs;
-	channel->rsigs = signals;
-
-	if (channel->ept.sig_cb)
-		channel->ept.sig_cb(channel->ept.rpdev, old, channel->rsigs);
-
-	CH_INFO(channel, "old:%d new:%d\n", old, channel->rsigs);
 
 	return 0;
 }

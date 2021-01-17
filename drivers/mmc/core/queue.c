@@ -115,13 +115,6 @@ static enum blk_eh_timer_return mmc_cqe_timed_out(struct request *req)
 				mmc_cqe_recovery_notifier(mrq);
 			return BLK_EH_RESET_TIMER;
 		}
-
-		pr_info("%s: %s: Timeout even before req reaching LDD, completing the req. Active reqs: %d Req: %p Tag: %d\n",
-				mmc_hostname(host), __func__,
-				mmc_cqe_qcnt(mq), req, req->tag);
-		mmc_log_string(host,
-				"Timeout even before req reaching LDD,completing the req. Active reqs: %d Req: %p Tag: %d\n",
-				mmc_cqe_qcnt(mq), req, req->tag);
 		/* The request has gone already */
 		return BLK_EH_DONE;
 	default:
@@ -136,19 +129,13 @@ static enum blk_eh_timer_return mmc_mq_timed_out(struct request *req,
 	struct request_queue *q = req->q;
 	struct mmc_queue *mq = q->queuedata;
 	unsigned long flags;
-	int ret;
+	bool ignore_tout;
 
 	spin_lock_irqsave(q->queue_lock, flags);
+	ignore_tout = mq->recovery_needed || !mq->use_cqe;
+	spin_unlock_irqrestore(q->queue_lock, flags);
 
-	if (mq->recovery_needed || !mq->use_cqe) {
-		ret = BLK_EH_RESET_TIMER;
-		spin_unlock_irqrestore(q->queue_lock, flags);
-	} else {
-		spin_unlock_irqrestore(q->queue_lock, flags);
-		ret = mmc_cqe_timed_out(req);
-	}
-
-	return ret;
+	return ignore_tout ? BLK_EH_RESET_TIMER : mmc_cqe_timed_out(req);
 }
 
 static void mmc_mq_recovery_handler(struct work_struct *work)
@@ -202,7 +189,7 @@ static void mmc_queue_setup_discard(struct request_queue *q,
 	q->limits.discard_granularity = card->pref_erase << 9;
 	/* granularity must not be greater than max. discard */
 	if (card->pref_erase > max_discard)
-		q->limits.discard_granularity = 0;
+		q->limits.discard_granularity = SECTOR_SIZE;
 	if (mmc_can_secure_erase_trim(card))
 		blk_queue_flag_set(QUEUE_FLAG_SECERASE, q);
 }

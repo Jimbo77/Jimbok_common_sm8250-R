@@ -59,8 +59,8 @@ int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
 	if (err)
 		return err;
 
-	/* ... in case we looked up ciphertext name before key was added */
-	if (dentry->d_flags & DCACHE_ENCRYPTED_NAME)
+	/* ... in case we looked up no-key name before key was added */
+	if (fscrypt_is_nokey_name(dentry))
 		return -ENOKEY;
 
 	if (!fscrypt_has_permitted_context(dir, inode))
@@ -84,9 +84,9 @@ int __fscrypt_prepare_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (err)
 		return err;
 
-	/* ... in case we looked up ciphertext name(s) before key was added */
-	if ((old_dentry->d_flags | new_dentry->d_flags) &
-	    DCACHE_ENCRYPTED_NAME)
+	/* ... in case we looked up no-key name(s) before key was added */
+	if (fscrypt_is_nokey_name(old_dentry) ||
+	    fscrypt_is_nokey_name(new_dentry))
 		return -ENOKEY;
 
 	if (old_dir != new_dir) {
@@ -117,51 +117,9 @@ int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry,
 		spin_lock(&dentry->d_lock);
 		dentry->d_flags |= DCACHE_ENCRYPTED_NAME;
 		spin_unlock(&dentry->d_lock);
+		d_set_d_op(dentry, &fscrypt_d_ops);
 	}
 	return err;
-}
-EXPORT_SYMBOL_GPL(__fscrypt_prepare_lookup);
-
-/**
- * fscrypt_prepare_setflags() - prepare to change flags with FS_IOC_SETFLAGS
- * @inode: the inode on which flags are being changed
- * @oldflags: the old flags
- * @flags: the new flags
- *
- * The caller should be holding i_rwsem for write.
- *
- * Return: 0 on success; -errno if the flags change isn't allowed or if
- *	   another error occurs.
- */
-int fscrypt_prepare_setflags(struct inode *inode,
-			     unsigned int oldflags, unsigned int flags)
-{
-	struct fscrypt_info *ci;
-	struct fscrypt_master_key *mk;
-	int err;
-
-	/*
-	 * When the CASEFOLD flag is set on an encrypted directory, we must
-	 * derive the secret key needed for the dirhash.  This is only possible
-	 * if the directory uses a v2 encryption policy.
-	 */
-	if (IS_ENCRYPTED(inode) && (flags & ~oldflags & FS_CASEFOLD_FL)) {
-		err = fscrypt_require_key(inode);
-		if (err)
-			return err;
-		ci = inode->i_crypt_info;
-		if (ci->ci_policy.version != FSCRYPT_POLICY_V2)
-			return -EINVAL;
-		mk = ci->ci_master_key->payload.data[0];
-		down_read(&mk->mk_secret_sem);
-		if (is_master_key_secret_present(&mk->mk_secret))
-			err = fscrypt_derive_dirhash_key(ci, mk);
-		else
-			err = -ENOKEY;
-		up_read(&mk->mk_secret_sem);
-		return err;
-	}
-	return 0;
 }
 
 int __fscrypt_prepare_symlink(struct inode *dir, unsigned int len,

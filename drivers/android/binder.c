@@ -931,104 +931,6 @@ static struct binder_work *binder_dequeue_work_head_ilocked(
 	return w;
 }
 
-#ifdef CONFIG_FAST_TRACK
-static int binder_switch_show(struct seq_file *m, void *unused)
-{
-	seq_printf(m, "%u\n", binder_enable_fg_switch);
-	return 0;
-}
-
-static int binder_switch_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, binder_switch_show, inode->i_private);
-}
-
-static ssize_t binder_switch_write(struct file *file, const char __user *buffer,
-	size_t count, loff_t *pos)
-{
-	char enable;
-
-	if (count > 0) {
-		if (get_user(enable, buffer))
-			return -EFAULT;
-
-		if (enable == '0')
-			binder_enable_fg_switch = 0;
-		else if (enable == '1')
-			binder_enable_fg_switch = 1;
-		else if (enable == '2')
-			binder_enable_fg_switch = 2;
-		else
-			return -EINVAL;
-	}
-
-	return count;
-}
-
-static const struct file_operations binder_switch_fops = {
-	.owner = THIS_MODULE,
-	.open = binder_switch_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-	.write = binder_switch_write,
-};
-
-static inline bool binder_proc_worklist_empty_ilocked(struct binder_proc *proc)
-{
-	return binder_worklist_empty_ilocked(&proc->todo) &&
-		binder_worklist_empty_ilocked(&proc->fg_todo);
-}
-
-static inline struct list_head *binder_proc_select_worklist_ilocked(
-	struct binder_proc *proc)
-{
-	if (binder_worklist_empty_ilocked(&proc->fg_todo)) {
-		proc->fg_count = 0;
-		return &proc->todo;
-	}
-
-	if (proc->fg_count >= MAX_FG_WORKS_PROCEEDED) {
-		proc->fg_count = 0;
-
-		if (!binder_worklist_empty_ilocked(&proc->todo)) {
-			struct binder_work *fg_w;
-			struct binder_work *w;
-
-			fg_w = list_first_entry(&proc->fg_todo,
-				struct binder_work, entry);
-			w = list_first_entry(&proc->todo,
-				struct binder_work, entry);
-
-			if (w->seq < fg_w->seq)
-				return &proc->todo;
-		}
-	}
-
-	proc->fg_count++;
-	return &proc->fg_todo;
-}
-static inline int is_static_ftt(struct sched_entity *se)
-{
-	return se->ftt_mark;
-}
-
-static inline int ftt_binder_enqueue(struct binder_thread *thread,
-                                        struct binder_thread *from)
-{
-	if (from && is_ftt(&from->task->se) &&
-		!is_ftt(&thread->task->se) && binder_enable_fg_switch)
-		return dynamic_ftt_enqueue(thread->task, DYNAMIC_FTT_BINDER);
-	return -1;
-}
-
-static inline void ftt_binder_dequeue(struct binder_thread *thread)
-{
-	if (is_dyn_ftt(&thread->task->se, DYNAMIC_FTT_BINDER))
-		dynamic_ftt_dequeue(thread->task, DYNAMIC_FTT_BINDER);
-}
-#endif
-
 static void
 binder_defer_work(struct binder_proc *proc, enum binder_deferred_state defer);
 static void binder_free_thread(struct binder_thread *thread);
@@ -3334,11 +3236,12 @@ static void binder_transaction(struct binder_proc *proc,
 			goto err_dead_binder;
 		}
 		e->to_node = target_node->debug_id;
-
-#ifdef CONFIG_SAMSUNG_FREECESS
-		freecess_sync_binder_report(proc, target_proc, tr);
-#endif
-
+		if (WARN_ON(proc == target_proc)) {
+			return_error = BR_FAILED_REPLY;
+			return_error_param = -EINVAL;
+			return_error_line = __LINE__;
+			goto err_invalid_target_handle;
+		}
 		if (security_binder_transaction(proc->tsk,
 						target_proc->tsk) < 0) {
 			return_error = BR_FAILED_REPLY;
@@ -3968,10 +3871,17 @@ static int binder_thread_write(struct binder_proc *proc,
 				struct binder_node *ctx_mgr_node;
 				mutex_lock(&context->context_mgr_node_lock);
 				ctx_mgr_node = context->binder_context_mgr_node;
-				if (ctx_mgr_node)
+				if (ctx_mgr_node) {
+					if (ctx_mgr_node->proc == proc) {
+						binder_user_error("%d:%d context manager tried to acquire desc 0\n",
+								  proc->pid, thread->pid);
+						mutex_unlock(&context->context_mgr_node_lock);
+						return -EINVAL;
+					}
 					ret = binder_inc_ref_for_node(
 							proc, ctx_mgr_node,
 							strong, NULL, &rdata);
+				}
 				mutex_unlock(&context->context_mgr_node_lock);
 			}
 			if (ret)

@@ -2623,11 +2623,8 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host)
 		goto out;
 	}
 	mask <<= offset;
-
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-	if (reg) {
-		ufshcd_rmwl(host->hba, TEST_BUS_SEL,
-		    (u32)host->testbus.select_major << testbus_sel_offset,
+	ufshcd_rmwl(host->hba, TEST_BUS_SEL,
+		    (u32)host->testbus.select_major << 19, ufs_qcom_testbus_config()
 		    REG_UFS_CFG1);
 		ufshcd_rmwl(host->hba, mask,
 		    (u32)host->testbus.select_minor << offset,
@@ -2643,8 +2640,8 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host)
 	 * committed before returning.
 	 */
 	mb();
-out:
-	return ret;
+
+	return 0; ufs_qcom_testbus_config()
 }
 
 static void ufs_qcom_testbus_read(struct ufs_hba *hba)
@@ -2702,20 +2699,11 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba, bool no_sleep)
 	ufs_qcom_dump_regs(hba, REG_UFS_SYS1CLK_1US, 16,
 			"HCI Vendor Specific Registers ");
 	ufs_qcom_print_hw_debug_reg_all(hba, NULL, ufs_qcom_dump_regs_wrapper);
-
-	if (no_sleep)
-		return;
-
-	/* sleep a bit intermittently as we are dumping too much data */
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_testbus_read(hba);
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_print_unipro_testbus(hba);
-	usleep_range(1000, 1100);
-	ufs_qcom_print_utp_hci_testbus(hba);
-	usleep_range(1000, 1100);
-	ufs_qcom_phy_dbg_register_dump(phy);
-	usleep_range(1000, 1100);
+	udelay(1000);
 }
 
 /**

@@ -272,45 +272,58 @@ int fscrypt_encrypt_block_inplace(const struct inode *inode, struct page *page,
 }
 EXPORT_SYMBOL(fscrypt_encrypt_block_inplace);
 
-/**
- * fscrypt_decrypt_pagecache_blocks() - Decrypt filesystem blocks in a pagecache page
- * @page:      The locked pagecache page containing the block(s) to decrypt
- * @len:       Total size of the block(s) to decrypt.  Must be a nonzero
- *		multiple of the filesystem's block size.
- * @offs:      Byte offset within @page of the first block to decrypt.  Must be
- *		a multiple of the filesystem's block size.
- *
- * The specified block(s) are decrypted in-place within the pagecache page,
- * which must still be locked and not uptodate.  Normally, blocksize ==
- * PAGE_SIZE and the whole page is decrypted at once.
- *
- * This is for use by the filesystem's ->readpages() method.
- *
- * Return: 0 on success; -errno on failure
+/*
+ * Validate dentries in encrypted directories to make sure we aren't potentially
+ * caching stale dentries after a key has been added.
  */
 int fscrypt_decrypt_pagecache_blocks(struct page *page, unsigned int len,
 				     unsigned int offs)
 {
-	const struct inode *inode = page->mapping->host;
-	const unsigned int blockbits = inode->i_blkbits;
-	const unsigned int blocksize = 1 << blockbits;
-	u64 lblk_num = ((u64)page->index << (PAGE_SHIFT - blockbits)) +
-		       (offs >> blockbits);
-	unsigned int i;
+	struct dentry *dir;
 	int err;
+	int valid;
 
-	if (WARN_ON_ONCE(!PageLocked(page)))
-		return -EINVAL;
+	/*
+	 * Plaintext names are always valid, since fscrypt doesn't support
+	 * reverting to ciphertext names without evicting the directory's inode
+	 * -- which implies eviction of the dentries in the directory.
+	 */
+	if (!(dentry->d_flags & DCACHE_ENCRYPTED_NAME))
+		return 1;
 
-	if (WARN_ON_ONCE(len <= 0 || !IS_ALIGNED(len | offs, blocksize)))
-		return -EINVAL;
+	/*
+	 * Ciphertext name; valid if the directory's key is still unavailable.
+	 *
+	 * Although fscrypt forbids rename() on ciphertext names, we still must
+	 * use dget_parent() here rather than use ->d_parent directly.  That's
+	 * because a corrupted fs image may contain directory hard links, which
+	 * the VFS handles by moving the directory's dentry tree in the dcache
+	 * each time ->lookup() finds the directory and it already has a dentry
+	 * elsewhere.  Thus ->d_parent can be changing, and we must safely grab
+	 * a reference to some ->d_parent to prevent it from being freed.
+	 */
 
-#ifdef CONFIG_DDAR
-	if (fscrypt_dd_encrypted_inode(inode)) {
-		// Invert crypto order. OEM crypto must perform after 3rd party crypto
-		return 0;
-	}
-#endif
+	if (flags & LOOKUP_RCU)
+		return -ECHILD;
+
+	dir = dget_parent(dentry);
+	err = fscrypt_get_encryption_info(d_inode(dir));
+	valid = !fscrypt_has_encryption_key(d_inode(dir));
+	dput(dir);
+
+	if (err < 0)
+		return err;
+
+	return valid;
+}
+
+const struct dentry_operations fscrypt_d_ops = {
+	.d_revalidate = fscrypt_d_revalidate,
+};
+
+void fscrypt_restore_control_page(struct page *page)
+{
+	struct fscrypt_ctx *ctx;
 
 	for (i = offs; i < offs + len; i += blocksize, lblk_num++) {
 		err = fscrypt_crypt_block(inode, FS_DECRYPT, lblk_num, page,

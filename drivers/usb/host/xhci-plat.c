@@ -416,18 +416,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct clk *reg_clk = xhci->reg_clk;
 	struct usb_hcd *shared_hcd = xhci->shared_hcd;
 
-#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
-		/* In order to prevent kernel panic */
-		if (!pm_runtime_suspended(&xhci->shared_hcd->self.root_hub->dev)) {
-			pr_info("%s, shared_hcd pm_runtime_forbid\n", __func__);
-			pm_runtime_forbid(&xhci->shared_hcd->self.root_hub->dev);
-		}
-		if (!pm_runtime_suspended(&xhci->main_hcd->self.root_hub->dev)) {
-			pr_info("%s, main_hcd pm_runtime_forbid\n", __func__);
-			pm_runtime_forbid(&xhci->main_hcd->self.root_hub->dev);
-		}
-#endif
-
+	pm_runtime_get_sync(&dev->dev);
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 
 	device_remove_file(&dev->dev, &dev_attr_config_imod);
@@ -442,8 +431,9 @@ static int xhci_plat_remove(struct platform_device *dev)
 	clk_disable_unprepare(reg_clk);
 	usb_put_hcd(hcd);
 
-	pm_runtime_set_suspended(&dev->dev);
 	pm_runtime_disable(&dev->dev);
+	pm_runtime_put_noidle(&dev->dev);
+	pm_runtime_set_suspended(&dev->dev);
 
 	return 0;
 }
@@ -460,9 +450,11 @@ static int __maybe_unused xhci_plat_runtime_idle(struct device *dev)
 	 * before suspend we have to call pm_runtime_autosuspend() manually.
 	 */
 
-	pm_runtime_mark_last_busy(dev);
-	pm_runtime_autosuspend(dev);
-	return -EBUSY;
+	ret = xhci_priv_resume_quirk(hcd);
+	if (ret)
+		return ret;
+
+	return xhci_resume(xhci, 0);
 }
 
 static int __maybe_unused xhci_plat_runtime_suspend(struct device *dev)

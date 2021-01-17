@@ -141,10 +141,8 @@ struct inet_connection_sock {
 		u32		  probe_timestamp;
 	} icsk_mtup;
 	u32			  icsk_user_timeout;
-
-/* XXX inflated by temporary internal debugging info */
-#define ICSK_CA_PRIV_SIZE      (216)
-	u64			  icsk_ca_priv[ICSK_CA_PRIV_SIZE / sizeof(u64)];
+	u64			  icsk_ca_priv[104 / sizeof(u64)];
+#define ICSK_CA_PRIV_SIZE      (13 * sizeof(u64))
 };
 
 #define ICSK_TIME_RETRANS	1	/* Retransmit timer */
@@ -316,6 +314,10 @@ int inet_csk_compat_getsockopt(struct sock *sk, int level, int optname,
 			       char __user *optval, int __user *optlen);
 int inet_csk_compat_setsockopt(struct sock *sk, int level, int optname,
 			       char __user *optval, unsigned int optlen);
+
+/* update the fast reuse flag when adding a socket */
+void inet_csk_update_fastreuse(struct inet_bind_bucket *tb,
+			       struct sock *sk);
 
 struct dst_entry *inet_csk_update_pmtu(struct sock *sk, u32 mtu);
 #endif /* _INET_CONNECTION_SOCK_H */

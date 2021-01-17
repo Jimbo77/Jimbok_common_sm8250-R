@@ -1967,11 +1967,6 @@ int __wil_up(struct wil6210_priv *wil)
 		return rc;
 
 	/* Rx RING. After MAC and beacon */
-	if (rx_ring_order == 0)
-		rx_ring_order = wil->hw_version < HW_VER_TALYN_MB ?
-			WIL_RX_RING_SIZE_ORDER_DEFAULT :
-			WIL_RX_RING_SIZE_ORDER_TALYN_DEFAULT;
-
 	rc = wil->txrx_ops.rx_init(wil, rx_ring_order);
 	if (rc)
 		return rc;
@@ -2107,12 +2102,13 @@ void wil_halp_vote(struct wil6210_priv *wil)
 	if (++wil->halp.ref_cnt == 1) {
 		reinit_completion(&wil->halp.comp);
 		/* mark to IRQ context to handle HALP ICR */
-		atomic_set(&wil->halp.handle_icr, 1);
+		wil->halp.handle_icr = true;
 		wil6210_set_halp(wil);
 		rc = wait_for_completion_timeout(&wil->halp.comp, to_jiffies);
 		if (!rc) {
 			wil_err(wil, "HALP vote timed out\n");
 			/* Mask HALP as done in case the interrupt is raised */
+			wil->halp.handle_icr = false;
 			wil6210_mask_halp(wil);
 		} else {
 			wil_dbg_irq(wil,
