@@ -452,6 +452,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wno-trigraphs \
 		   -Wno-unused-variable \
 		   -Wno-declaration-after-statement \
 		   -Wno-pointer-compare \
+		   -Wno-int-conversion \
 		   -std=gnu89
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=

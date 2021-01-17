@@ -413,23 +413,6 @@ static u32 bbr_inflight(struct sock *sk, u32 bw, int gain)
 
 	return inflight;
 }
-
-/* Find the cwnd increment based on estimate of ack aggregation */
-static u32 bbr_ack_aggregation_cwnd(struct sock *sk)
-{
-	u32 max_aggr_cwnd, aggr_cwnd = 0;
-
-	if (bbr_extra_acked_gain && bbr_full_bw_reached(sk)) {
-		max_aggr_cwnd = ((u64)bbr_bw(sk) * bbr_extra_acked_max_us)
-				/ BW_UNIT;
-		aggr_cwnd = (bbr_extra_acked_gain * bbr_extra_acked(sk))
-			     >> BBR_SCALE;
-		aggr_cwnd = min(aggr_cwnd, max_aggr_cwnd);
-	}
-
-	return aggr_cwnd;
-}
-
 /* An optimization in BBR to reduce losses: On the first round of recovery, we
  * follow the packet conservation principle: send P packets per P packets acked.
  * After that, we slow-start and send at most 2*P packets per P packets acked.
@@ -499,6 +482,8 @@ static void bbr_set_cwnd(struct sock *sk, const struct rate_sample *rs,
 	target_cwnd = bbr_quantization_budget(sk, target_cwnd, gain);
 
 	/* If we're below target cwnd, slow start cwnd toward target cwnd. */
+	target_cwnd = bbr_bdp(sk, bw, gain);
+	target_cwnd = bbr_quantization_budget(sk, target_cwnd, gain);
 	if (bbr_full_bw_reached(sk))  /* only cut cwnd if we filled the pipe */
 		cwnd = min(cwnd + acked, target_cwnd);
 	else if (cwnd < target_cwnd || tp->delivered < TCP_INIT_CWND)
@@ -556,8 +541,6 @@ static void bbr_advance_cycle_phase(struct sock *sk)
 
 	bbr->cycle_idx = (bbr->cycle_idx + 1) & (CYCLE_LEN - 1);
 	bbr->cycle_mstamp = tp->delivered_mstamp;
-	bbr->pacing_gain = bbr->lt_use_bw ? BBR_UNIT :
-					    bbr_pacing_gain[bbr->cycle_idx];
 }
 
 /* Gain cycling: cycle pacing gain to converge to fair share of available bw. */
@@ -575,8 +558,6 @@ static void bbr_reset_startup_mode(struct sock *sk)
 	struct bbr *bbr = inet_csk_ca(sk);
 
 	bbr->mode = BBR_STARTUP;
-	bbr->pacing_gain = bbr_high_gain;
-	bbr->cwnd_gain	 = bbr_high_gain;
 }
 
 static void bbr_reset_probe_bw_mode(struct sock *sk)
@@ -584,8 +565,6 @@ static void bbr_reset_probe_bw_mode(struct sock *sk)
 	struct bbr *bbr = inet_csk_ca(sk);
 
 	bbr->mode = BBR_PROBE_BW;
-	bbr->pacing_gain = BBR_UNIT;
-	bbr->cwnd_gain = bbr_cwnd_gain;
 	bbr->cycle_idx = CYCLE_LEN - 1 - prandom_u32_max(bbr_cycle_rand);
 	bbr_advance_cycle_phase(sk);	/* flip to next phase of gain cycle */
 }
@@ -863,8 +842,6 @@ static void bbr_check_drain(struct sock *sk, const struct rate_sample *rs)
 
 	if (bbr->mode == BBR_STARTUP && bbr_full_bw_reached(sk)) {
 		bbr->mode = BBR_DRAIN;	/* drain queue we created */
-		bbr->pacing_gain = bbr_drain_gain;	/* pace slow to drain */
-		bbr->cwnd_gain = bbr_high_gain;	/* maintain cwnd */
 		tcp_sk(sk)->snd_ssthresh =
 				bbr_inflight(sk, bbr_max_bw(sk), BBR_UNIT);
 	}	/* fall through to check if in-flight is already small: */
@@ -926,8 +903,6 @@ static void bbr_update_min_rtt(struct sock *sk, const struct rate_sample *rs)
 	if (bbr_probe_rtt_mode_ms > 0 && filter_expired &&
 	    !bbr->idle_restart && bbr->mode != BBR_PROBE_RTT) {
 		bbr->mode = BBR_PROBE_RTT;  /* dip, drain queue */
-		bbr->pacing_gain = BBR_UNIT;
-		bbr->cwnd_gain = BBR_UNIT;
 		bbr_save_cwnd(sk);  /* note cwnd so we can restore it */
 		bbr->probe_rtt_done_stamp = 0;
 	}
@@ -955,6 +930,35 @@ static void bbr_update_min_rtt(struct sock *sk, const struct rate_sample *rs)
 		bbr->idle_restart = 0;
 }
 
+static void bbr_update_gains(struct sock *sk)
+{
+	struct bbr *bbr = inet_csk_ca(sk);
+
+	switch (bbr->mode) {
+	case BBR_STARTUP:
+		bbr->pacing_gain = bbr_high_gain;
+		bbr->cwnd_gain	 = bbr_high_gain;
+		break;
+	case BBR_DRAIN:
+		bbr->pacing_gain = bbr_drain_gain;	/* slow, to drain */
+		bbr->cwnd_gain	 = bbr_high_gain;	/* keep cwnd */
+		break;
+	case BBR_PROBE_BW:
+		bbr->pacing_gain = (bbr->lt_use_bw ?
+				    BBR_UNIT :
+				    bbr_pacing_gain[bbr->cycle_idx]);
+		bbr->cwnd_gain	 = bbr_cwnd_gain;
+		break;
+	case BBR_PROBE_RTT:
+		bbr->pacing_gain = BBR_UNIT;
+		bbr->cwnd_gain	 = BBR_UNIT;
+		break;
+	default:
+		WARN_ONCE(1, "BBR bad mode: %u\n", bbr->mode);
+		break;
+	}
+}
+
 static void bbr_update_model(struct sock *sk, const struct rate_sample *rs)
 {
 	bbr_update_bw(sk, rs);
@@ -963,6 +967,7 @@ static void bbr_update_model(struct sock *sk, const struct rate_sample *rs)
 	bbr_check_full_bw_reached(sk, rs);
 	bbr_check_drain(sk, rs);
 	bbr_update_min_rtt(sk, rs);
+	bbr_update_gains(sk);
 }
 
 static void bbr_main(struct sock *sk, const struct rate_sample *rs)

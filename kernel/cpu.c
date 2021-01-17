@@ -1033,6 +1033,7 @@ static int cpu_down_maps_locked(unsigned int cpu, enum cpuhp_state target)
 
 static int do_cpu_down(unsigned int cpu, enum cpuhp_state target)
 {
+	struct cpumask newmask;
 	int err;
 
 	/*
@@ -1046,6 +1047,11 @@ static int do_cpu_down(unsigned int cpu, enum cpuhp_state target)
 	 * happens on from other CPUs in the root domain.
 	 */
 	cpuset_wait_for_hotplug();
+	cpumask_andnot(&newmask, cpu_online_mask, cpumask_of(cpu));
+	/* One big cluster CPU and one little cluster CPU must remain online */
+	if (!cpumask_intersects(&newmask, cpu_perf_mask) ||
+		!cpumask_intersects(&newmask, cpu_lp_mask))
+		return -EINVAL;
 
 	cpu_maps_update_begin();
 	err = cpu_down_maps_locked(cpu, target);
@@ -1264,6 +1270,7 @@ int freeze_secondary_cpus(int primary)
 {
 	int cpu, error = 0;
 
+	unaffine_perf_irqs();
 	cpu_maps_update_begin();
 	if (!cpu_online(primary))
 		primary = cpumask_first(cpu_online_mask);
@@ -1273,13 +1280,13 @@ int freeze_secondary_cpus(int primary)
 	 */
 	cpumask_clear(frozen_cpus);
 
-	pr_info("Disabling non-boot CPUs ...\n");
+	pr_debug("Disabling non-boot CPUs ...\n");
 	for_each_online_cpu(cpu) {
 		if (cpu == primary)
 			continue;
 
 		if (pm_wakeup_pending()) {
-			pr_info("Wakeup pending. Abort CPU freeze\n");
+			pr_debug("Wakeup pending. Abort CPU freeze\n");
 			error = -EBUSY;
 			break;
 		}
@@ -1330,7 +1337,7 @@ void enable_nonboot_cpus(void)
 	if (cpumask_empty(frozen_cpus))
 		goto out;
 
-	pr_info("Enabling non-boot CPUs ...\n");
+	pr_debug("Enabling non-boot CPUs ...\n");
 
 	arch_enable_nonboot_cpus_begin();
 
@@ -1339,7 +1346,7 @@ void enable_nonboot_cpus(void)
 		error = _cpu_up(cpu, 1, CPUHP_ONLINE);
 		trace_suspend_resume(TPS("CPU_ON"), cpu, false);
 		if (!error) {
-			pr_info("CPU%d is up\n", cpu);
+			pr_debug("CPU%d is up\n", cpu);
 			cpu_device = get_cpu_device(cpu);
 			if (!cpu_device)
 				pr_err("%s: failed to get cpu%d device\n",
@@ -1356,6 +1363,7 @@ void enable_nonboot_cpus(void)
 	cpumask_clear(frozen_cpus);
 out:
 	cpu_maps_update_done();
+	reaffine_perf_irqs();
 }
 
 static int __init alloc_frozen_cpus(void)
@@ -2346,6 +2354,22 @@ EXPORT_SYMBOL(__cpu_active_mask);
 
 struct cpumask __cpu_isolated_mask __read_mostly;
 EXPORT_SYMBOL(__cpu_isolated_mask);
+
+#if CONFIG_LITTLE_CPU_MASK
+static const unsigned long lp_cpu_bits = CONFIG_LITTLE_CPU_MASK;
+const struct cpumask *const cpu_lp_mask = to_cpumask(&lp_cpu_bits);
+#else
+const struct cpumask *const cpu_lp_mask = cpu_possible_mask;
+#endif
+EXPORT_SYMBOL(cpu_lp_mask);
+
+#if CONFIG_BIG_CPU_MASK
+static const unsigned long perf_cpu_bits = CONFIG_BIG_CPU_MASK;
+const struct cpumask *const cpu_perf_mask = to_cpumask(&perf_cpu_bits);
+#else
+const struct cpumask *const cpu_perf_mask = cpu_possible_mask;
+#endif
+EXPORT_SYMBOL(cpu_perf_mask);
 
 void init_cpu_present(const struct cpumask *src)
 {
