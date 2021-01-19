@@ -13,6 +13,9 @@ enum df_device {
 };
 
 #ifdef CONFIG_DEVFREQ_BOOST
+#ifndef CONFIG_CPU_INPUT_BOOST
+extern unsigned long last_input_time;
+#endif
 void devfreq_boost_kick_flex(enum df_device device, unsigned int duration_ms);
 void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms);
 void devfreq_boost_kick_wake(enum df_device device, unsigned int duration_ms);
@@ -37,3 +40,4 @@ void devfreq_register_boost_device(enum df_device device, struct devfreq *df)
 #endif
 
 #endif /* _DEVFREQ_BOOST_H_ */
+
