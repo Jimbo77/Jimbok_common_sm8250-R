@@ -28,3 +28,8 @@ obj-$(CONFIG_DEVFREQ_GOV_STATICMAP)	+= governor_staticmap.o
 
 # DEVFREQ Event Drivers
 obj-$(CONFIG_PM_DEVFREQ_EVENT)		+= event/
+
+# DEVFREQ Boost
+obj-$(CONFIG_DEVFREQ_BOOST)		+= devfreq_boost.o
+obj-$(CONFIG_DEVFREQ_BOOST_DDR)		+= devfreq_boost_ddr.o
+obj-$(CONFIG_DEVFREQ_BOOST_GPU)		+= devfreq_boost_gpu.o

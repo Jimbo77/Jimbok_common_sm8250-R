@@ -23,6 +23,9 @@
 #include <trace/events/power.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
+#include <linux/devfreq_boost.h>
+#include <linux/devfreq_boost_ddr.h>
+#include <linux/devfreq_boost_gpu.h>
 
 /* Has to be ULL to prevent overflow where this macro is used. */
 #define MBYTE (1ULL << 20)
@@ -177,6 +180,19 @@ int devfreq_add_devbw(struct device *dev)
 	if (IS_ERR(d->df)) {
 		msm_bus_scale_unregister_client(d->bus_client);
 		return PTR_ERR(d->df);
+	}
+
+	if (!strcmp(dev_name(dev), "soc:qcom,cpu-cpu-llcc-bw")) {
+		devfreq_register_boost_device(DEVFREQ_MSM_CPUBW, d->df);
+		pr_info("Added devfreq boost device %s\n",dev_name(dev));
+	}
+	if (!strcmp(dev_name(dev), "soc:qcom,cpu-llcc-ddr-bw")) {
+		devfreq_register_boost_ddr_device(DEVFREQ_MSM_DDRBW, d->df);
+		pr_info("Added devfreq ddr boost device %s\n",dev_name(dev));
+	}
+	if (!strcmp(dev_name(dev), "soc:qcom,gpubw")) {
+		devfreq_register_boost_gpu_device(DEVFREQ_MSM_GPUBW, d->df);
+		pr_info("Added devfreq gpu boost device %s\n",dev_name(dev));
 	}
 
 	return 0;
