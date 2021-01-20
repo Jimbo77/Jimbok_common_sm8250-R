@@ -792,6 +792,9 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	if (ret != 1)
 		return -EINVAL;
 
+	if(!strcmp(str_governor, "schedutil"))
+		sprintf(str_governor, "schedhorizon");
+
 	if (cpufreq_parse_governor(str_governor, &new_policy))
 		return -EINVAL;
 
