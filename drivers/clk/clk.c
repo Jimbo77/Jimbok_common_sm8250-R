@@ -3293,8 +3293,6 @@ static const struct file_operations clk_state_fops = {
 	.release	= single_release,
 };
 
-=======
->>>>>>> 903c6bd937ca... clk: Evict unregistered clks from parent caches
 static void clk_summary_show_one(struct seq_file *s, struct clk_core *c,
 				 int level)
 {

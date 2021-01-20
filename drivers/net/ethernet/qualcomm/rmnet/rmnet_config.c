@@ -371,6 +371,7 @@ static int rmnet_changelink(struct net_device *dev, struct nlattr *tb[],
 {
 	struct rmnet_priv *priv = netdev_priv(dev);
 	struct net_device *real_dev;
+	struct rmnet_endpoint *ep;
 	struct rmnet_port *port;
 	u16 mux_id;
 
