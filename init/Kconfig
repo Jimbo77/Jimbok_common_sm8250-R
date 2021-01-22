@@ -434,6 +434,16 @@ config VIRT_CPU_ACCOUNTING_GEN
 
 endchoice
 
+config CPUSETS_ASSIST
+	bool "Cpusets configuration helper"
+	depends on CPUSETS
+	depends on ANDROID
+	help
+	  This option enables the configuration of default cpusets
+	  parameters from kernel.
+
+	  If unsure, say N.
+
 config IRQ_TIME_ACCOUNTING
 	bool "Fine granularity task level IRQ time accounting"
 	depends on HAVE_IRQ_TIME_ACCOUNTING && !VIRT_CPU_ACCOUNTING_NATIVE
