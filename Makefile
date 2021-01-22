@@ -455,6 +455,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wno-trigraphs \
 		   -Wno-pointer-compare \
 		   -Wno-int-conversion \
 		   -Wno-ignored-attributes \
+		   -Wno-visibility \
 		   -std=gnu89
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
