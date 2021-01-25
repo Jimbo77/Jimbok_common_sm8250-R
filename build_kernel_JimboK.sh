@@ -15,26 +15,16 @@ make mrproper
 mkdir out
 
 DTS_DIR=$(pwd)/out/arch/$ARCH/boot/dts
-BUILD_CROSS_COMPILE=$(pwd)/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-#KERNEL_LLVM_BIN=$(pwd)/toolchain/llvm-arm-toolchain-ship/8.0/bin/clang
-#KERNEL_LLVM_BIN=../toolchains/llvm/bin/clang
+BUILD_CROSS_COMPILE=aarch64-linux-gnu-
 KERNEL_LLVM_BIN=$(pwd)/toolchains/llvm-arm-toolchain-ship-10.0/bin/clang
 CLANG_TRIPLE=aarch64-linux-gnu-
+BUILD_CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
 
-KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc VARIANT_DEFCONFIG=vendor/$1/kona_sec_$1_usa_singlew_defconfig"
+KERNEL_MAKE_ENV="ARCH=arm64 DTC_EXT=$(pwd)/tools/dtc VARIANT_DEFCONFIG=vendor/$1/kona_sec_$1_usa_singlew_defconfig"
 
-# If not cleaning the tree between builds, the following command will be
-# required on 2nd and subsequent builds to prevent a huge slowdown of the
-# build.
-#
-# find techpack -type f -name \*.o | xargs rm -f
+make O=$(pwd)/out $KERNEL_MAKE_ENV CROSS_COMPILE=$BUILD_CROSS_COMPILE CROSS_COMPILE_COMPAT=$BUILD_CROSS_COMPILE_COMPAT LLVM=1 CLANG_TRIPLE=$CLANG_TRIPLE vendor/JimboK_defconfig
 
-
-#make $KERNEL_MAKE_ENV CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CFP_CC=$KERNEL_LLVM_BIN vendor/z3q_kor_singlex_defconfig
-
-make O=$(pwd)/out $KERNEL_MAKE_ENV CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CFP_CC=$KERNEL_LLVM_BIN vendor/JimboK_defconfig
-
-make -j$(nproc) O=$(pwd)/out $KERNEL_MAKE_ENV CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CFP_CC=$KERNEL_LLVM_BIN
+make -j$(nproc) O=$(pwd)/out $KERNEL_MAKE_ENV CROSS_COMPILE=$BUILD_CROSS_COMPILE CROSS_COMPILE_COMPAT=$BUILD_CROSS_COMPILE_COMPAT LLVM=1 CLANG_TRIPLE=$CLANG_TRIPLE
 
 cp $(pwd)/out/arch/$ARCH/boot/Image.gz $(pwd)/out/Image.gz
 cp $(pwd)/out/arch/$ARCH/boot/Image.gz-dtb $(pwd)/out/Image.gz-dtb
