@@ -47,7 +47,8 @@ $(pwd)/tools/mkdtimg create $(pwd)/out/dtbo.img --page_size=4096 ${DTBO_FILES}
 mv $(pwd)/out/Image.gz $(pwd)/out/Image.gz
 mv $(pwd)/out/dtb.img $(pwd)/out/dtb.img
 
-cp $(pwd)/out/Image.gz ~/build/OFRP/samsung/$1/prebuilt
-cp $(pwd)/out/dtb.img ~/build/OFRP/samsung/$1/prebuilt
+cp $(pwd)/out/Image.gz ~/build/Prebuilds/samsung/$1/prebuilt
+cp $(pwd)/out/dtb.img ~/build/Prebuilds/samsung/$1/prebuilt/dtb
+
 
 
