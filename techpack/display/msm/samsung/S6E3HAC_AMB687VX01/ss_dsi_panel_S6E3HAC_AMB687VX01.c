@@ -25,6 +25,10 @@ Copyright (C) 2020, Samsung Electronics. All rights reserved.
 #include "ss_dsi_panel_S6E3HAC_AMB687VX01.h"
 #include "ss_dsi_mdnie_S6E3HAC_AMB687VX01.h"
 
+#ifdef CONFIG_HYBRID_DC_DIMMING
+const u8 zero_aor_hex[2] = {0x00, 0x2B};
+#endif
+
 /* AOD Mode status on AOD Service */
 
 enum {
@@ -1424,6 +1428,11 @@ static struct dsi_panel_cmd_set *__ss_vrr(struct samsung_display_driver_data *vd
 		/* HMT: 0A 64 AOR 85% */
 		vrr_cmds->cmds[VRR_CMDID_AOR].msg.tx_buf[1] = 0x0A;
 		vrr_cmds->cmds[VRR_CMDID_AOR].msg.tx_buf[2] = 0x64;
+	#ifdef CONFIG_HYBRID_DC_DIMMING
+	} else if (is_hbm == false) {
+		memcpy(&vrr_cmds->cmds[VRR_CMDID_AOR].msg.tx_buf[1],
+				zero_aor_hex, vrr_cmds->cmds[VRR_CMDID_AOR].msg.tx_len - 1);
+	#endif
 	} else {
 		if (vdd->panel_revision < 3)	/* panel rev.A~ rev.C */
 			memcpy(&vrr_cmds->cmds[VRR_CMDID_AOR].msg.tx_buf[1],
