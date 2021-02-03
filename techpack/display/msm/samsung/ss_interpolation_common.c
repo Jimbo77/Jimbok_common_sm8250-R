@@ -32,7 +32,11 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
 
 #ifdef CONFIG_HYBRID_DC_DIMMING
 const char aor_dc_hex[2] = {0x00, 0x14};
+#if defined(CONFIG_SEC_X1Q_PROJECT) || defined(CONFIG_SEC_Y2Q_PROJECT)
+const char aor_hbm_hex[2] = {0x00, 0x14};
+#else
 const char aor_hbm_hex[2] = {0x00, 0x0C};
+#endif
 #endif
 
 char ss_dimming_mode_debug[][DIMMING_MODE_DEBUG_STRING] = {
