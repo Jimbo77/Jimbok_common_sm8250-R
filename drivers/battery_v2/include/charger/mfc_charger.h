@@ -24,13 +24,13 @@
 #include <linux/alarmtimer.h>
 #include "../sec_charging_common.h"
 
-#define MFC_FW_BIN_VERSION			0x142
-#define MFC_FW_BIN_FULL_VERSION		0x01420000
+#define MFC_FW_BIN_VERSION			0x144
+#define MFC_FW_BIN_FULL_VERSION		0x01440000
 #define MFC_FW_BIN_VERSION_ADDR		0x0084 //fw rev85 address
 #define MTP_MAX_PROGRAM_SIZE 0x4000
 #define MTP_VERIFY_ADDR			0x0000
 #define MTP_VERIFY_SIZE			0x4680
-#define MTP_VERIFY_CHKSUM		0xC068
+#define MTP_VERIFY_CHKSUM		0x0274
 
 #define MFC_FLASH_FW_HEX_PATH		"mfc/mfc_fw_flash.bin"
 #define MFC_FW_SDCARD_BIN_PATH		"/sdcard/mfc_fw_flash.bin"
@@ -150,6 +150,9 @@
 /* TX Min Operating Frequency = 60 MHz/value, default is 110kHz (60MHz/0x222=110) */
 #define MFC_TX_MIN_OP_FREQ_L_REG			0xD4 /* default 0x22 */
 #define MFC_TX_MIN_OP_FREQ_H_REG			0xD5 /* default 0x02 */
+
+#define TX_MIN_OP_FREQ_DEFAULT	113
+
 /* TX Max Operating Frequency = 60 MHz/value, default is 148kHz (60MHz/0x196=148) */
 #define MFC_TX_MAX_OP_FREQ_L_REG			0xD6 /* default 0x96 */
 #define MFC_TX_MAX_OP_FREQ_H_REG			0xD7 /* default 0x01 */
@@ -312,6 +315,7 @@
 /* value of WPC_TX_COM_TX_ID(0x01) */
 #define TX_ID_UNKNOWN				0x00
 #define TX_ID_SNGL_PORT_START		0x01
+#define TX_ID_NOBBLE_PAD			0x10
 #define TX_ID_VEHICLE_PAD			0x11
 #define TX_ID_SNGL_PORT_END			0x1F
 #define TX_ID_MULTI_PORT_START		0x20
@@ -622,15 +626,16 @@ enum {
 };
 
 enum {
-    MFC_ADC_VOUT = 0,
-    MFC_ADC_VRECT,
-    MFC_ADC_RX_IOUT,
-    MFC_ADC_DIE_TEMP,
-    MFC_ADC_OP_FRQ,
-    MFC_ADC_TX_OP_FRQ,
-    MFC_ADC_PING_FRQ,
-    MFC_ADC_TX_IOUT,
-    MFC_ADC_TX_VOUT,
+	MFC_ADC_VOUT = 0,
+	MFC_ADC_VRECT,
+	MFC_ADC_RX_IOUT,
+	MFC_ADC_DIE_TEMP,
+	MFC_ADC_OP_FRQ,
+	MFC_ADC_TX_OP_FRQ,
+	MFC_ADC_TX_MIN_OP_FRQ,
+	MFC_ADC_PING_FRQ,
+	MFC_ADC_TX_IOUT,
+	MFC_ADC_TX_VOUT,
 };
 
 enum {
@@ -765,13 +770,13 @@ enum mfc_ping_freq {
 	FREQ_LOW,
 	FREQ_HIGH,
 	FREQ_MAX,
-	FREQ_TXID_MAX = 23,
+	FREQ_TXID_MAX = 24,
 };
 
 static const u8 Ping_freq[FREQ_TXID_MAX][FREQ_MAX] = {
 	/*txid	freq_low	freq_high*/
 	{0x0,	0xFF,	0xFF},
-	{0x10,	0x8F,	0x95},
+	{0x10,	0xAC,	0xB2},
 	{0x14,	0x8F,	0x95},
 	{0x15,	0x8F,	0x95},
 	{0x16,	0x8F,	0x95},
@@ -781,6 +786,7 @@ static const u8 Ping_freq[FREQ_TXID_MAX][FREQ_MAX] = {
 	{0x24,	0x8F,	0x95},
 	{0x30,	0x8F,	0x95},
 
+	{0x31,	0x7F,	0x85},
 	{0x31,	0x8F,	0x95},
 	{0x32,	0x8F,	0x95},
 	{0x33,	0x8F,	0x95},
@@ -790,8 +796,8 @@ static const u8 Ping_freq[FREQ_TXID_MAX][FREQ_MAX] = {
 	{0x42,	0x7D,	0x83},
 	{0xA0,	0x8F,	0x95},
 	{0xA1,	0x7D,	0x83},
-	{0xA2,	0x7D,	0x83},
 
+	{0xA2,	0x7D,	0x83},
 	{0xF3,	0x87,	0x8D},
 	{0xF3,	0x8F,	0x95},
 	{0xFF,	0xFF,	0xFF},
@@ -1101,6 +1107,8 @@ struct mfc_charger_platform_data {
 	u32 oc_fod1;
 	u32 phone_fod_threshold;
 	u32 gear_ping_freq;
+	u32 gear_min_op_freq;
+	u32 gear_min_op_freq_delay;
 	bool wpc_vout_ctrl_lcd_on;
 	int no_hv;
 	bool keep_tx_vout;
@@ -1133,6 +1141,7 @@ struct mfc_charger_data {
 	struct wakeup_source *wpc_opfq_lock;
 	struct wakeup_source *wpc_tx_opfq_lock;
 	struct wakeup_source *wpc_tx_duty_min_lock;
+	struct wakeup_source *wpc_tx_min_opfq_lock;
 	struct wakeup_source *wpc_afc_vout_lock;
 	struct wakeup_source *wpc_vout_mode_lock;
 	struct wakeup_source *wpc_rx_connection_lock;
@@ -1159,6 +1168,7 @@ struct mfc_charger_data {
 	struct delayed_work wpc_i2c_error_work;
 	struct delayed_work	wpc_rx_type_det_work;
 	struct delayed_work	wpc_rx_connection_work;
+	struct delayed_work wpc_tx_min_op_freq_work;
 	struct delayed_work wpc_tx_op_freq_work;
 	struct delayed_work wpc_tx_duty_min_work;
 	struct delayed_work wpc_tx_phm_work;
@@ -1222,5 +1232,9 @@ struct mfc_charger_data {
 	u8 ping_freq;
 	bool req_afc_tx;
 #endif
+
+	struct mutex fw_lock;
+	unsigned long fw_size;
+	u8 *fw_img;
 };
 #endif /* __WIRELESS_CHARGER_MFC_H */
