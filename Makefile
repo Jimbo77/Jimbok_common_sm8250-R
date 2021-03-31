@@ -707,7 +707,7 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, address-of-packed-member)
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS   += -Os
 else
-KBUILD_CFLAGS   += -O3 -mcpu=cortex-a55
+KBUILD_CFLAGS   += -O3 -mcpu=cortex-a55 -mtune=cortex-a55
 endif
 
 polly-flags-$(CONFIG_LLVM_POLLY) += -mllvm -polly \
