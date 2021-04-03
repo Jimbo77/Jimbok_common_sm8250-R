@@ -865,7 +865,8 @@ int elv_register_queue(struct request_queue *q, bool uevent)
 
 		e->registered = 1;
 		if (!e->uses_mq && e->type->ops.sq.elevator_registered_fn)
-			e->type->ops.sq.elevator_registered_fn(q);
+			e->type->ops.sq.elevator_registered_fn(q); HEAD
+			mutex_unlock(&q->sysfs_lock);
 		else if (e->uses_mq && e->type->ops.mq.elevator_registered_fn)
 			e->type->ops.mq.elevator_registered_fn(q);
 	}
