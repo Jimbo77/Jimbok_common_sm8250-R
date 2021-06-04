@@ -24,7 +24,7 @@ BUILD_CROSS_COMPILE=aarch64-linux-gnu-
 CLANG_TRIPLE=aarch64-linux-gnu-
 BUILD_CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
 
-KERNEL_MAKE_ENV="ARCH=arm64 DTC_EXT=$(pwd)/tools/dtc VARIANT_DEFCONFIG=vendor/$1/kona_sec_$1_kor_singlex_defconfig"
+KERNEL_MAKE_ENV="ARCH=arm64 DTC_EXT=$(pwd)/tools/dtc VARIANT_DEFCONFIG=vendor/$1/kona_sec_$1_usa_singlew_defconfig"
 
 make -j$(nproc) -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV CROSS_COMPILE=$BUILD_CROSS_COMPILE CROSS_COMPILE_COMPAT=$BUILD_CROSS_COMPILE_COMPAT LLVM=1 CLANG_TRIPLE=$CLANG_TRIPLE vendor/JimboK_defconfig
 
