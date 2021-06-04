@@ -11760,6 +11760,7 @@
 
 				samsung,br_tables {
 
+					/*
 					vrr60@0 {
 						samsung,refresh_rate = <0x3c>;
 						samsung,ddi_vfp = <0x10>;
@@ -11797,7 +11798,7 @@
 							samsung,ddi_vactive = <0xc80>;
 						};
 					};
-
+					*/
 					vrr120hs@1 {
 						samsung,refresh_rate = <0x78>;
 						samsung,br_tbl_sot_hs_mode;
@@ -11828,6 +11829,7 @@
 						samsung,flash_gamma_0xc8_check_sum_start_offset = <0x2822>;
 						samsung,flash_gamma_0xc8_check_sum_end_offset = <0x2823>;
 
+						/*
 						vrr96hs {
 							samsung,refresh_rate = <0x60>;
 							samsung,br_tbl_sot_hs_mode;
@@ -11836,8 +11838,10 @@
 							samsung,ddi_vbp = <0x10>;
 							samsung,ddi_vactive = <0xc80>;
 						};
+						*/
 					};
-
+					
+					/*
 					vrr60hs@2 {
 						samsung,refresh_rate = <0x3c>;
 						samsung,br_tbl_sot_hs_mode;
@@ -11868,14 +11872,15 @@
 						samsung,flash_gamma_0xc8_check_sum_start_offset = <0x2822>;
 						samsung,flash_gamma_0xc8_check_sum_end_offset = <0x2823>;
 					};
+					*/
 				};
 
 				qcom,mdss-dsi-display-timings {
 
+					/*
 					wqhd60 {
 						qcom,display-topology = <0x1 0x1 0x1 0x2 0x2 0x1>;
 						qcom,default-topology-index = <0x1>;
-						qcom,mdss-dsi-timing-default;
 						qcom,mdss-dsi-panel-width = <0x5a0>;
 						qcom,mdss-dsi-panel-height = <0xc80>;
 						qcom,mdss-dsi-h-pulse-width = <0x64>;
@@ -11914,7 +11919,6 @@
 					wqhd48 {
 						qcom,display-topology = <0x1 0x1 0x1 0x2 0x2 0x1>;
 						qcom,default-topology-index = <0x1>;
-						qcom,mdss-dsi-timing-default;
 						qcom,mdss-dsi-panel-width = <0x5a0>;
 						qcom,mdss-dsi-panel-height = <0xc80>;
 						qcom,mdss-dsi-h-pulse-width = <0x64>;
@@ -12098,9 +12102,11 @@
 						qcom,mdss-dsc-block-prediction-enable;
 					};
 
+					*/
 					fhd120hs {
 						qcom,display-topology = <0x1 0x1 0x1 0x2 0x2 0x1>;
 						qcom,default-topology-index = <0x1>;
+						qcom,mdss-dsi-timing-default;
 						qcom,mdss-dsi-panel-width = <0x438>;
 						qcom,mdss-dsi-panel-height = <0x960>;
 						qcom,mdss-dsi-h-pulse-width = <0x32>;
@@ -12134,7 +12140,8 @@
 						qcom,mdss-dsc-bit-per-pixel = <0x8>;
 						qcom,mdss-dsc-block-prediction-enable;
 					};
-
+							
+					/*
 					hd48 {
 						qcom,display-topology = <0x1 0x1 0x1 0x2 0x2 0x1>;
 						qcom,default-topology-index = <0x1>;
@@ -12284,10 +12291,12 @@
 						qcom,mdss-dsc-bit-per-pixel = <0x8>;
 						qcom,mdss-dsc-block-prediction-enable;
 					};
+					*/
 
 					hd120hs {
 						qcom,display-topology = <0x1 0x1 0x1 0x2 0x2 0x1>;
 						qcom,default-topology-index = <0x1>;
+						qcom,mdss-dsi-timing-default;
 						qcom,mdss-dsi-panel-width = <0x2d0>;
 						qcom,mdss-dsi-panel-height = <0x640>;
 						qcom,mdss-dsi-h-pulse-width = <0x64>;
