@@ -618,7 +618,7 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned cmd,
 		if (link_state == DWC3_LINK_STATE_U1 ||
 		    link_state == DWC3_LINK_STATE_U2 ||
 		    link_state == DWC3_LINK_STATE_U3) {
-			ret = __dwc3_gadget_wakeup(dwc);
+			//ret = __dwc3_gadget_wakeup(dwc);
 			dev_WARN_ONCE(dwc->dev, ret, "wakeup failed --> %d\n",
 					ret);
 		}
@@ -2261,7 +2261,6 @@ static int dwc3_gadget_wakeup_int(struct dwc3 *dwc)
 	case DWC3_LINK_STATE_RX_DET:	/* in HS, means Early Suspend */
 	case DWC3_LINK_STATE_U3:	/* in HS, means SUSPEND */
 	case DWC3_LINK_STATE_U2:	/* in HS, means Sleep (L1) */
-	case DWC3_LINK_STATE_U1:
 	case DWC3_LINK_STATE_RESUME:
 		break;
 	case DWC3_LINK_STATE_U1:
