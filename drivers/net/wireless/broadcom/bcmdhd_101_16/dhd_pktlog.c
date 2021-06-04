@@ -1,7 +1,7 @@
 /*
  * DHD debugability packet logging support
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2021, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -370,12 +370,23 @@ dhd_pktlog_ring_add_pkts(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pktid
 	rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
 
 	pkts->info.pkt = PKTDUP(dhdp->osh, pkt);
+	/*
+	 * skb clone can be NULL, but pktlog feature assume it alway can be cloned
+	 * The dummy pkt info will be added in the list to fit pktcount & list items
+	 * and handled in the dhd_pktlog_dump_write() with ignoring info.pkt
+	 */
+	if (pkts->info.pkt == NULL) {
+		DHD_ERROR(("%s : skb clone returns NULL \n", __FUNCTION__));
+	}
 	pkts->info.pkt_len = PKTLEN(dhdp->osh, pkt);
 	pkts->info.driver_ts_sec = (uint32)ts_nsec;
 	pkts->info.driver_ts_usec = (uint32)(rem_nsec/NSEC_PER_USEC);
 	pkts->info.firmware_ts = 0U;
 	pkts->info.payload_type = FRAME_TYPE_ETHERNET_II;
 	pkts->info.direction = direction;
+
+	pkts->info.tx_status_ts_sec = 0;
+	pkts->info.tx_status_ts_usec = 0;
 
 	if (direction == PKT_TX) {
 		pkts->info.pkt_hash =  __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
@@ -410,7 +421,8 @@ dhd_pktlog_ring_tx_status(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pkti
 	dhd_pktlog_filter_t *pktlog_filter;
 	dll_t *item_p, *next_p;
 	unsigned long flags = 0;
-
+	u64 ts_nsec;
+	unsigned long rem_nsec;
 #ifdef BDC
 	struct bdc_header *h;
 	BCM_REFERENCE(h);
@@ -430,6 +442,9 @@ dhd_pktlog_ring_tx_status(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pkti
 
 	pkt_hash = __dhd_dbg_pkt_hash((uintptr_t)pkt, pktid);
 	pkt_fate = __dhd_dbg_map_tx_status_to_pkt_fate(status);
+
+	ts_nsec = local_clock();
+	rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
 
 	/* find the sent tx packet and adding pkt_fate info */
 	DHD_PKT_LOG_LOCK(pktlog_ring->pktlog_ring_lock, flags);
@@ -451,6 +466,8 @@ dhd_pktlog_ring_tx_status(dhd_pub_t *dhdp, void *pkt, void *pktdata, uint32 pkti
 		PKTPULL(dhdp->osh, tx_pkt->info.pkt, BDC_HEADER_LEN);
 		PKTPULL(dhdp->osh, tx_pkt->info.pkt, (h->dataOffset << DHD_WORD_TO_LEN_SHIFT));
 #endif /* BDC */
+		tx_pkt->info.tx_status_ts_sec = (uint32)ts_nsec;
+		tx_pkt->info.tx_status_ts_usec = (uint32)(rem_nsec/NSEC_PER_USEC);
 		DHD_PKT_LOG(("%s(): Found pkt hash in prev pos\n", __FUNCTION__));
 		break;
 	    }
@@ -1024,8 +1041,11 @@ dhd_pktlog_get_item_length(dhd_pktlog_ring_info_t *report_ptr)
 		frame_len = (uint32)min(report_ptr->info.pkt_len, (size_t)MAX_FRAME_LEN_80211_MGMT);
 	}
 
-	bytes_user_data = sprintf(buf, "%s:%s:%02d\n", DHD_PKTLOG_FATE_INFO_FORMAT,
-			(report_ptr->tx_fate ? "Failure" : "Succeed"), report_ptr->tx_fate);
+	bytes_user_data = snprintf(buf, sizeof(buf), "%s:%s:%02d:%s:%d.%d s\n",
+			DHD_PKTLOG_FATE_INFO_FORMAT,
+			(report_ptr->tx_fate ? "Failure" : "Succeed"), report_ptr->tx_fate,
+			(report_ptr->info.direction == PKT_TX) ? "TX" : "RX",
+			report_ptr->info.tx_status_ts_sec, report_ptr->info.tx_status_ts_usec);
 	write_frame_len = frame_len + bytes_user_data;
 
 	/* pcap pkt head has incl_len and orig_len */
@@ -1138,6 +1158,11 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 			break;
 		}
 
+		if (report_ptr->info.pkt == NULL) {
+			DHD_ERROR(("%s : pkt isn't located skip it\n", __FUNCTION__));
+			continue;
+		}
+
 		ret = dhd_export_debug_data((char*)&report_ptr->info.driver_ts_sec, file,
 				user_buf, sizeof(report_ptr->info.driver_ts_sec), &pos);
 		len += sizeof(report_ptr->info.driver_ts_sec);
@@ -1155,8 +1180,13 @@ dhd_pktlog_dump_write(dhd_pub_t *dhdp, void *file, const void *user_buf, uint32 
 					(size_t)MAX_FRAME_LEN_80211_MGMT);
 		}
 
-		bytes_user_data = sprintf(buf, "%s:%s:%02d\n", DHD_PKTLOG_FATE_INFO_FORMAT,
-				(report_ptr->tx_fate ? "Failure" : "Succeed"), report_ptr->tx_fate);
+		bytes_user_data = snprintf(buf, sizeof(buf), "%s:%s:%02d:%s:%d.%d s\n",
+				DHD_PKTLOG_FATE_INFO_FORMAT,
+				(report_ptr->tx_fate ? "Failure" : "Succeed"),
+				report_ptr->tx_fate,
+				(report_ptr->info.direction == PKT_TX) ? "TX" : "RX",
+				report_ptr->info.tx_status_ts_sec,
+				report_ptr->info.tx_status_ts_usec);
 		write_frame_len = frame_len + bytes_user_data;
 
 		/* pcap pkt head has incl_len and orig_len */

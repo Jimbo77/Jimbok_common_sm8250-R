@@ -1,7 +1,7 @@
 /*
  * DHD debugability support
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2021, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -621,7 +621,7 @@ dhd_dbg_verboselog_printf(dhd_pub_t *dhdp, prcd_event_log_hdr_t *plog_hdr,
 #endif /* DHD_LOG_PRINT_RATE_LIMIT */
 	/* print the message out in a logprint  */
 	if ((control_logtrace == LOGTRACE_RAW_FMT) || !(raw_event->fmts)) {
-		if (dhdp->dbg) {
+		if (dhdp->dbg && dhdp->dbg->dbg_rings[FW_VERBOSE_RING_ID].state != RING_STOP) {
 			log_level = dhdp->dbg->dbg_rings[FW_VERBOSE_RING_ID].log_level;
 			for (id = 0; id < ARRAYSIZE(fw_verbose_level_map); id++) {
 				if ((fw_verbose_level_map[id].tag == plog_hdr->tag) &&
@@ -941,7 +941,9 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 	msg_hdr.len = sizeof(*logentry_header) + datalen;
 	memcpy(logbuf + sizeof(*logentry_header), data, datalen);
 	DHD_DBGIF(("%s: datalen %d %d\n", __FUNCTION__, msg_hdr.len, datalen));
+#ifdef DHD_DEBUGABILITY_LOG_DUMP_RING
 	dhd_dbg_push_to_ring(dhdp, FW_VERBOSE_RING_ID, &msg_hdr, logbuf);
+#endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
 
 	/* Print sequence number, originating set and length of received
 	 * event log buffer. Refer to event log buffer structure in
@@ -957,7 +959,7 @@ dhd_dbg_msgtrace_log_parser(dhd_pub_t *dhdp, void *event_data,
 		DHD_ERROR(("%s logset: %d max: %d out of range queried: %d\n",
 			__FUNCTION__, logset, event_log_max_sets, event_log_max_sets_queried));
 #ifdef DHD_FW_COREDUMP
-		if (event_log_max_sets_queried) {
+		if (event_log_max_sets_queried && !dhd_memdump_is_scheduled(dhdp)) {
 			DHD_ERROR(("%s: collect socram for DUMP_TYPE_LOGSET_BEYOND_RANGE\n",
 				__FUNCTION__));
 			dhdp->memdump_type = DUMP_TYPE_LOGSET_BEYOND_RANGE;
@@ -1433,8 +1435,17 @@ __dhd_dbg_map_tx_status_to_pkt_fate(uint16 status)
 		case WLFC_CTL_PKTFLAG_EXPIRED:
 			pkt_fate = TX_PKT_FATE_FW_DROP_EXPTIME;
 			break;
+		case WLFC_CTL_PKTFLAG_DROPPED:
+			pkt_fate = TX_PKT_FATE_DRV_DROP_OTHER;
+			break;
 		case WLFC_CTL_PKTFLAG_MKTFREE:
 			pkt_fate = TX_PKT_FATE_FW_PKT_FREE;
+			break;
+		case WLFC_CTL_PKTFLAG_MAX_SUP_RETR:
+			pkt_fate = TX_PKT_FATE_FW_MAX_SUP_RETR;
+			break;
+		case WLFC_CTL_PKTFLAG_FORCED_EXPIRED:
+			pkt_fate = TX_PKT_FATE_FW_FORCED_EXPIRED;
 			break;
 		default:
 			pkt_fate = TX_PKT_FATE_FW_DROP_OTHER;
@@ -1935,6 +1946,19 @@ dhd_dbg_stop_pkt_monitor(dhd_pub_t *dhdp)
 		} \
 	} while (0);
 
+static wifi_tx_packet_fate
+__dhd_dbg_convert_fate(wifi_tx_packet_fate fate)
+{
+	wifi_tx_packet_fate new_fate = fate;
+
+	 /* To prevent SIG-ABORT, packet_fate > TX_PKT_FATE_DRV_DROP_OTHER */
+	if (fate > TX_PKT_FATE_DRV_DROP_OTHER) {
+		new_fate = TX_PKT_FATE_FW_DROP_OTHER;
+	}
+
+	return new_fate;
+}
+
 int
 dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		uint16 req_count, uint16 *resp_count)
@@ -1981,7 +2005,12 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 			compat_wifi_tx_report_t *comp_ptr = compat_ptr((uintptr_t) cptr);
 			compat_dhd_dbg_pkt_info_t compat_tx_pkt;
 			__dhd_dbg_dump_tx_pkt_info(dhdp, tx_pkt, count);
-			__COPY_TO_USER(&comp_ptr->fate, &tx_pkt->fate, sizeof(tx_pkt->fate));
+			/* fate convert asscording to wifi_logger.h */
+			{
+				wifi_tx_packet_fate new_fate = tx_pkt->fate;
+				new_fate = __dhd_dbg_convert_fate(new_fate);
+				__COPY_TO_USER(&comp_ptr->fate, &new_fate, sizeof(new_fate));
+			}
 
 			compat_tx_pkt.payload_type = tx_pkt->info.payload_type;
 			compat_tx_pkt.pkt_len = tx_pkt->info.pkt_len;
@@ -2004,7 +2033,12 @@ dhd_dbg_monitor_get_tx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		ptr = (wifi_tx_report_t *)user_buf;
 		while ((count < pkt_count) && tx_pkt && ptr) {
 			__dhd_dbg_dump_tx_pkt_info(dhdp, tx_pkt, count);
-			__COPY_TO_USER(&ptr->fate, &tx_pkt->fate, sizeof(tx_pkt->fate));
+			/* fate convert asscording to wifi_logger.h */
+			{
+				wifi_tx_packet_fate new_fate = tx_pkt->fate;
+				new_fate = __dhd_dbg_convert_fate(new_fate);
+				__COPY_TO_USER(&ptr->fate, &new_fate, sizeof(new_fate));
+			}
 			__COPY_TO_USER(&ptr->frame_inf.payload_type,
 				&tx_pkt->info.payload_type,
 				OFFSETOF(dhd_dbg_pkt_info_t, pkt_hash));
@@ -2071,7 +2105,6 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 			compat_dhd_dbg_pkt_info_t compat_rx_pkt;
 			__dhd_dbg_dump_rx_pkt_info(dhdp, rx_pkt, count);
 			__COPY_TO_USER(&comp_ptr->fate, &rx_pkt->fate, sizeof(rx_pkt->fate));
-
 			compat_rx_pkt.payload_type = rx_pkt->info.payload_type;
 			compat_rx_pkt.pkt_len = rx_pkt->info.pkt_len;
 			compat_rx_pkt.driver_ts = rx_pkt->info.driver_ts;
@@ -2093,7 +2126,6 @@ dhd_dbg_monitor_get_rx_pkts(dhd_pub_t *dhdp, void __user *user_buf,
 		ptr = (wifi_rx_report_t *)user_buf;
 		while ((count < pkt_count) && rx_pkt && ptr) {
 			__dhd_dbg_dump_rx_pkt_info(dhdp, rx_pkt, count);
-
 			__COPY_TO_USER(&ptr->fate, &rx_pkt->fate, sizeof(rx_pkt->fate));
 			__COPY_TO_USER(&ptr->frame_inf.payload_type,
 				&rx_pkt->info.payload_type,
@@ -2647,7 +2679,7 @@ dhd_dbg_attach(dhd_pub_t *dhdp, dbg_pullreq_t os_pullreq,
 	dbg = MALLOCZ(dhdp->osh, sizeof(dhd_dbg_t));
 	if (!dbg)
 		return BCME_NOMEM;
-
+#ifdef DHD_DEBUGABILITY_LOG_DUMP_RING
 	buf = MALLOCZ(dhdp->osh, FW_VERBOSE_RING_SIZE);
 	if (!buf)
 		goto error;
@@ -2655,7 +2687,7 @@ dhd_dbg_attach(dhd_pub_t *dhdp, dbg_pullreq_t os_pullreq,
 			(uint8 *)FW_VERBOSE_RING_NAME, FW_VERBOSE_RING_SIZE, buf, FALSE);
 	if (ret)
 		goto error;
-
+#endif /* DHD_DEBUGABILITY_LOG_DUMP_RING */
 	buf = MALLOCZ(dhdp->osh, DHD_EVENT_RING_SIZE);
 	if (!buf)
 		goto error;
@@ -2684,7 +2716,6 @@ error:
 		}
 	}
 	MFREE(dhdp->osh, dbg, sizeof(dhd_dbg_t));
-
 	return ret;
 }
 

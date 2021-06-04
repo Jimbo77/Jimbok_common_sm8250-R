@@ -1,7 +1,7 @@
 /*
  * Linux cfgp2p driver
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2021, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -412,8 +412,10 @@ wl_cfgp2p_set_firm_p2p(struct bcm_cfg80211 *cfg)
 	 * After Initializing firmware, we have to set current mac address to
 	 * firmware for P2P device address
 	 */
+	CFGP2P_INFO(("p2p dev addr : "MACDBG"\n", MAC2STRDBG(p2p_dev_addr->octet)));
 	ret = wldev_iovar_setbuf_bsscfg(ndev, "p2p_da_override", p2p_dev_addr,
-		sizeof(*p2p_dev_addr), cfg->ioctl_buf, WLC_IOCTL_MAXLEN, 0, &cfg->ioctl_buf_sync);
+			sizeof(*p2p_dev_addr), cfg->ioctl_buf, WLC_IOCTL_MAXLEN, 0,
+			&cfg->ioctl_buf_sync);
 	if (ret && ret != BCME_UNSUPPORTED) {
 		CFGP2P_ERR(("failed to update device address ret %d\n", ret));
 	}
@@ -571,6 +573,51 @@ wl_cfgp2p_ifidx(struct bcm_cfg80211 *cfg, struct ether_addr *mac, s32 *index)
 	return ret;
 }
 
+#define DISCOVERY_EBUSY_RETRY_LIMIT 5
+static void
+wl_cfgp2p_handle_discovery_busy(struct bcm_cfg80211 *cfg, s32 err)
+{
+	static u32 busy_count = 0;
+	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
+
+	if (err != BCME_BUSY) {
+		busy_count = 0;
+		return;
+	}
+
+	busy_count++;
+
+	if (busy_count >= DISCOVERY_EBUSY_RETRY_LIMIT) {
+		struct ether_addr *p2p_dev_addr = wl_to_p2p_bss_macaddr(cfg, P2PAPI_BSSCFG_DEVICE);
+
+		CFGP2P_ERR(("p2p disc busy!!!\n"));
+
+		if (ETHER_ISNULLADDR(p2p_dev_addr)) {
+			CFGP2P_ERR(("NULL p2p_dev_addr\n"));
+		} else {
+			CFGP2P_ERR(("p2p disc mac : "MACDBG"\n", MAC2STRDBG(p2p_dev_addr->octet)));
+		}
+
+		if (dhd_query_bus_erros(dhdp)) {
+			CFGP2P_ERR(("bus error\n"));
+			return;
+		}
+
+		dhdp->p2p_disc_busy_occurred = TRUE;
+		busy_count = 0;
+
+#if defined(DHD_DEBUG) && defined(DHD_FW_COREDUMP)
+		if (dhdp->memdump_enabled) {
+			dhdp->memdump_type = DUMP_TYPE_P2P_DISC_BUSY;
+			dhd_bus_mem_dump(dhdp);
+		}
+#endif /* DHD_DEBUG && DHD_FW_COREDUMP */
+
+		dhdp->hang_reason = HANG_REASON_P2P_DISC_BUSY;
+		dhd_os_send_hang_message(dhdp);
+	}
+}
+
 static s32
 wl_cfgp2p_set_discovery(struct bcm_cfg80211 *cfg, s32 on)
 {
@@ -582,6 +629,10 @@ wl_cfgp2p_set_discovery(struct bcm_cfg80211 *cfg, s32 on)
 
 	if (unlikely(ret < 0)) {
 		CFGP2P_ERR(("p2p_disc %d error %d\n", on, ret));
+
+		if (on) {
+			wl_cfgp2p_handle_discovery_busy(cfg, ret);
+		}
 	}
 
 	return ret;
@@ -1558,7 +1609,6 @@ wl_cfgp2p_discover_listen(struct bcm_cfg80211 *cfg, s32 channel, u32 duration_ms
 {
 #define EXTRA_DELAY_TIME	100
 	s32 ret = BCME_OK;
-	timer_list_compat_t *_timer;
 	s32 extra_delay;
 	struct net_device *netdev = bcmcfg_to_prmry_ndev(cfg);
 
@@ -1583,7 +1633,6 @@ wl_cfgp2p_discover_listen(struct bcm_cfg80211 *cfg, s32 channel, u32 duration_ms
 
 	ret = wl_cfgp2p_set_p2p_mode(cfg, WL_P2P_DISC_ST_LISTEN, channel, (u16) duration_ms,
 	            wl_to_p2p_bss_bssidx(cfg, P2PAPI_BSSCFG_DEVICE));
-	_timer = &cfg->p2p->listen_timer;
 
 	/*  We will wait to receive WLC_E_P2P_DISC_LISTEN_COMPLETE from dongle ,
 	 *  otherwise we will wait up to duration_ms + 100ms + duration / 10
@@ -1596,7 +1645,7 @@ wl_cfgp2p_discover_listen(struct bcm_cfg80211 *cfg, s32 channel, u32 duration_ms
 		extra_delay = 0;
 	}
 
-	INIT_TIMER(_timer, wl_cfgp2p_listen_expired, duration_ms, extra_delay);
+	mod_timer(&cfg->p2p->listen_timer, jiffies + msecs_to_jiffies(duration_ms + extra_delay));
 #ifdef WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST
 	wl_clr_p2p_status(cfg, LISTEN_EXPIRED);
 #endif /* WL_CFG80211_VSDB_PRIORITIZE_SCAN_REQUEST */
@@ -1690,8 +1739,9 @@ wl_cfgp2p_action_tx_complete(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev
 }
 
 #define ETHER_LOCAL_ADDR 0x02
-s32
-wl_actframe_fillup_v2(struct net_device *dev, wl_af_params_v2_t *af_params_v2_p,
+static s32
+wl_actframe_fillup_v2(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
+	struct net_device *dev, wl_af_params_v2_t *af_params_v2_p,
 	wl_af_params_t *af_params, const u8 *sa, uint16 wl_af_params_size)
 {
 	s32 err = 0;
@@ -1719,13 +1769,16 @@ wl_actframe_fillup_v2(struct net_device *dev, wl_af_params_v2_t *af_params_v2_p,
 	}
 	/* check if local admin bit is set and addr is different from ndev addr */
 	if ((sa[0] & ETHER_LOCAL_ADDR) &&
-			memcmp(sa, dev->dev_addr, ETH_ALEN)) {
+		(cfgdev->iftype == NL80211_IFTYPE_STATION) &&
+		memcmp(sa, dev->dev_addr, ETH_ALEN)) {
 		/* Use mask to avoid randomization, as the address from supplicant
 		 * is already randomized.
 		 */
 		eacopy(sa, &action_frame_v2_p->rand_mac_addr);
 		action_frame_v2_p->rand_mac_mask = rand_mac_mask;
 		action_frame_v2_p->flags |= WL_RAND_GAS_MAC;
+		eacopy(sa, &cfg->af_randmac);
+		cfg->randomized_gas_tx = TRUE;
 	}
 	return err;
 }
@@ -1739,8 +1792,8 @@ wl_actframe_fillup_v2(struct net_device *dev, wl_af_params_v2_t *af_params_v2_p,
  * 802.11 ack has been received for the sent action frame.
  */
 s32
-wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, struct net_device *dev,
-	wl_af_params_t *af_params, s32 bssidx, const u8 *sa)
+wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
+	struct net_device *dev, wl_af_params_t *af_params, s32 bssidx, const u8 *sa)
 {
 	s32 ret = BCME_OK;
 	s32 evt_ret = BCME_OK;
@@ -1784,7 +1837,7 @@ wl_cfgp2p_tx_action_frame(struct bcm_cfg80211 *cfg, struct net_device *dev,
 				ret = -ENOMEM;
 				goto exit;
 			}
-			ret = wl_actframe_fillup_v2(dev, af_params_v2_p, af_params, sa,
+			ret = wl_actframe_fillup_v2(cfg, cfgdev, dev, af_params_v2_p, af_params, sa,
 					wl_af_params_size);
 			if (ret != BCME_OK) {
 				WL_ERR(("unable to fill actframe_params, ret %d\n", ret));
@@ -1853,7 +1906,7 @@ wl_cfgp2p_generate_bss_mac(struct bcm_cfg80211 *cfg, struct ether_addr *primary_
 
 	(void)memcpy_s(mac_addr, ETH_ALEN, bcmcfg_to_prmry_ndev(cfg)->perm_addr, ETH_ALEN);
 	mac_addr->octet[0] |= 0x02;
-	WL_DBG(("P2P Discovery address:"MACDBG "\n", MAC2STRDBG(mac_addr->octet)));
+	CFGP2P_INFO(("P2P Discovery address:"MACDBG "\n", MAC2STRDBG(mac_addr->octet)));
 
 	int_addr = wl_to_p2p_bss_macaddr(cfg, P2PAPI_BSSCFG_CONNECTION1);
 	memcpy(int_addr, mac_addr, sizeof(struct ether_addr));

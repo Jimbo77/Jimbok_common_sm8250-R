@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020, Broadcom.
+# Copyright (C) 2021, Broadcom.
 #
 #      Unless you and Broadcom execute a separate written software license
 # agreement governing use of this software, this software is licensed to you
@@ -65,6 +65,8 @@ endif
 	DHDCFLAGS += -DDEBUG_DPC_THREAD_WATCHDOG
 	# KSO Attempts count
 	DHDCFLAGS += -DCUSTOM_MAX_KSO_ATTEMPTS=64
+	# Enable atomic pktget by default
+	DHDCFLAGS += -DDHD_USE_ATOMIC_PKTGET
 endif
 
 #####################
@@ -128,6 +130,8 @@ endif
 	DHDCFLAGS += -DHOST_SFH_LLC
 	# Flow ring status trace in ISR and DPC
 	DHDCFLAGS += -DDHD_FLOW_RING_STATUS_TRACE
+	# Enable internal Rx packet pool
+	DHDCFLAGS += -DRX_PKT_POOL
 endif
 
 
@@ -204,11 +208,13 @@ DHDCFLAGS += -DENABLE_FW_ROAM_SUSPEND
 DHDCFLAGS += -DDHD_LOSSLESS_ROAMING
 DHDCFLAGS += -DSKIP_ROAM_TRIGGER_RESET
 DHDCFLAGS += -DROAM_EVT_DISABLE
+DHDCFLAGS += -DDEBUG_SETROAMMODE
 
 # Enable Roam time thresh
 DHDCFLAGS += -DCUSTOM_ROAM_TIME_THRESH_IN_SUSPEND=6000
 DHDCFLAGS += -DENABLE_MAX_DTIM_IN_SUSPEND
 DHDCFLAGS += -DMAX_DTIM_ALLOWED_INTERVAL=925
+DHDCFLAGS += -DCUSTOM_SUSPEND_BCN_LI_DTIM=1
 DHDCFLAGS += -DDISABLE_DTIM_IN_SUSPEND
 
 # SoftAP
@@ -224,7 +230,8 @@ DHDCFLAGS += -DSUPPORT_DEEP_SLEEP
 DHDCFLAGS += -DSUPPORT_AMPDU_MPDU_CMD
 DHDCFLAGS += -DSOFTAP_SEND_HANGEVT
 DHDCFLAGS += -DNUM_SCB_MAX_PROBE=3
-DHDCFLAGS += -DDHD_USE_ATOMIC_PKTGET
+# Avoid overriding to GFP_ATOMIC by default only for pcie
+#DHDCFLAGS += -DDHD_USE_ATOMIC_PKTGET
 DHDCFLAGS += -DTDLS_MSG_ONLY_WFD
 DHDCFLAGS += -DCUSTOM_KEEP_ALIVE_SETTING=30000
 DHDCFLAGS += -DCUSTOM_EVENT_PM_WAKE=30
@@ -243,6 +250,9 @@ DHDCFLAGS += -DSUPPORT_SET_TID
 DHDCFLAGS += -DROAMEXP_SUPPORT
 DHDCFLAGS += -DCUSTOM_BSSID_BLACKLIST_NUM=0
 DHDCFLAGS += -DCUSTOM_SSID_WHITELIST_NUM=0
+# For cleanup KEEP_ALIVE
+DHDCFLAGS += -DDHD_CLEANUP_KEEP_ALIVE
+
 # Extended HANG event with reason codes
 DHDCFLAGS += -DDHD_USE_EXTENDED_HANG_REASON
 # Override HANG detect on MFG Test
@@ -303,6 +313,9 @@ DHDCFLAGS += -DKEEP_JP_REGREV
 # NAN feature flags
 DHDCFLAGS += -DWL_NAN -DWL_NAN_DISC_CACHE -DWL_NAN_ENABLE_MERGE
 
+# ACS feature
+DHDCFLAGS += -DWL_5G_SOFTAP_ONLY_ON_DEF_CHAN
+
 # FCC power limit control on ch12/13.
 DHDCFLAGS += -DFCC_PWR_LIMIT_2G
 
@@ -344,6 +357,10 @@ ifeq ($(CONFIG_WLAN_VENDOR_DUMP_ENABLE),y)
        DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/data/vendor/log/wifi/\""
        DHDCFLAGS += -DDHD_FILE_DUMP_EVENT
        DHDCFLAGS := $(filter-out -DDHD_DUMP_FILE_WRITE_FROM_KERNEL ,$(DHDCFLAGS))
+endif
+
+ifeq ($(CONFIG_WLAN_ANQP_RMAC_BACKPORTED),y)
+	DHDCFLAGS += -DWL_SUPPORT_BACKPORTED_ANQP_RMAC
 endif
 
 ##############################
@@ -402,12 +419,10 @@ DHDCFLAGS += -DCUSTOM_COUNTRY_CODE_XZ
 DHDCFLAGS += -DWL_SCHED_SCAN
 
 # Enable the Linux Firmware API for Andorid R OS
-ifeq ($(BUS_IFACE_PCIE),y)
 DHDCFLAGS += -DDHD_LINUX_STD_FW_API
 DHDCFLAGS += -DDHD_FW_NAME="\"bcmdhd_sta.bin\""
 DHDCFLAGS += -DDHD_NVRAM_NAME="\"nvram.txt\""
 DHDCFLAGS += -DDHD_CLM_NAME="\"bcmdhd_clm.blob\""
-endif
 
 # GN4 platform still disabled Lollipop features
 ifeq ($(filter y,$(CONFIG_MACH_UNIVERSAL5433) $(CONFIG_ARCH_APQ8084)),y)
@@ -522,6 +537,10 @@ ifeq ($(filter y,$(CONFIG_SOC_EXYNOS9820) $(CONFIG_SOC_EXYNOS9830) \
   DHDCFLAGS += -DDNGL_AXI_ERROR_LOGGING
 #DHDCFLAGS += -DDHD_USE_WQ_FOR_DNGL_AXI_ERROR
 endif
+# Host wakeup gpio debug
+ifeq ($(CONFIG_SOC_EXYNOS2100),y)
+  DHDCFLAGS += -DPRINT_WAKEUP_GPIO_STATUS
+endif
   DHDCFLAGS += -DUSE_DMA_LOCK
   DHDCFLAGS += -DDHD_MAP_LOGGING
   DHDCFLAGS += -DDHD_MAP_PKTID_LOGGING
@@ -564,6 +583,8 @@ endif
 # Use restricted channels on STA/SoftAP concurrent mode
   DHDCFLAGS += -DAPSTA_RESTRICTED_CHANNEL
   DHDCFLAGS += -DDHD_LOG_DUMP
+  # Enable MMIO Trace
+  DHDCFLAGS += -DDHD_MMIO_TRACE
 # Enable log print rate limit
   DHDCFLAGS += -DDHD_LOG_PRINT_RATE_LIMIT
 ifneq ($(CUSTOM_LOG_DUMP_BUFSIZE_MB),)
@@ -676,6 +697,7 @@ endif
   DHDCFLAGS += -DWL_BCNRECV
 # Iface force dev close
   DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
+  DHDCFLAGS += -DHANG_DELAY_BEFORE_DEV_CLOSE
 
 # Basic types and constants relating to 802.11ax
   DHDCFLAGS += -DWL11AX
@@ -738,6 +760,7 @@ ifneq ($(filter y m,$(CONFIG_BCM4375)),)
  DHDCFLAGS += -DUSE_WL_FRAMEBURST
  DHDCFLAGS += -DDISABLE_WL_FRAMEBURST_SOFTAP
  DHDCFLAGS += -DDISABLE_PM_BCNRX
+ DHDCFLAGS += -DDHD_LB_HOST_CTRL
 # Debugability
  DHDCFLAGS += -DEWP_ECNTRS_LOGGING
  DHDCFLAGS += -DEWP_RTT_LOGGING
@@ -755,9 +778,13 @@ ifneq ($(filter y m,$(CONFIG_BCM4375)),)
  DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
  #OWE
  DHDCFLAGS += -DWL_OWE
- # Disable HE on SoftAP and P2P
+# Disable HE on P2P and SoftAP
  DHDCFLAGS += -DWL_DISABLE_HE_SOFTAP
  DHDCFLAGS += -DWL_DISABLE_HE_P2P
+ifeq ($(CONFIG_WLAN_SOFTAP_HE_ENABLE),y)
+ DHDCFLAGS := $(filter-out -DWL_DISABLE_HE_SOFTAP,$(DHDCFLAGS))
+ DHDCFLAGS += -DTPUT_DEBUG_DUMP
+endif
 # tput enhancement for PCIE
 ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_TCPACK_SUPP_RATIO=15
@@ -790,6 +817,10 @@ ifeq ($(filter y,$(CONFIG_SOC_EXYNOS9820) $(CONFIG_SOC_EXYNOS9830) \
 # AXI error logging
   DHDCFLAGS += -DDNGL_AXI_ERROR_LOGGING
   #DHDCFLAGS += -DDHD_USE_WQ_FOR_DNGL_AXI_ERROR
+endif
+# Host wakeup gpio debug
+ifeq ($(CONFIG_SOC_EXYNOS2100),y)
+  DHDCFLAGS += -DPRINT_WAKEUP_GPIO_STATUS
 endif
   DHDCFLAGS += -DUSE_DMA_LOCK
   DHDCFLAGS += -DDHD_MAP_LOGGING
@@ -945,6 +976,9 @@ endif
   DHDCFLAGS += -DWL_CAC_TS
 # FAKEAP
   DHDCFLAGS += -DWL_BCNRECV
+# Iface force dev close
+  DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
+  DHDCFLAGS += -DHANG_DELAY_BEFORE_DEV_CLOSE
 
 # Basic types and constants relating to 802.11ax
   DHDCFLAGS += -DWL11AX
@@ -1020,10 +1054,13 @@ ifneq ($(CONFIG_BCM4361),)
 # Customer ocl disabe
  DHDCFLAGS += -DCUSTOM_SET_OCLOFF
  DHDCFLAGS += -DCUSTOM_BLOCK_DEAUTH_AT_EAP_FAILURE
+# Channel Utilization
+ DHDCFLAGS += -DWL_GET_CU
 # OCE/MBO
 DHDCFLAGS += -DWL_MBO
 DHDCFLAGS += -DWL_OCE
 DHDCFLAGS += -DWL_STATIC_IF
+DHDCFLAGS += -DWL_STATIC_IFNAME_PREFIX="\"swlan0\""
 ifneq ($(CONFIG_CFG80211_FILS_BKPORT),)
 #if kernel < 4.12, FILS patches need to be backported
 DHDCFLAGS += -DWL_FILS
@@ -1033,6 +1070,8 @@ DHDCFLAGS += -DWL_FILS_ROAM_OFFLD
 endif
 # ADDTS
  DHDCFLAGS += -DWL_CAC_TS
+# FAKEAP
+ DHDCFLAGS += -DWL_BCNRECV
 # tput enhancement for PCIE
 ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_TCPACK_SUPP_RATIO=15
@@ -1179,6 +1218,8 @@ ifeq ($(CONFIG_BCM4361),y)
 endif
 # Latency critical data
   DHDCFLAGS += -DSUPPORT_LATENCY_CRITICAL_DATA
+# Silent roam
+  DHDCFLAGS += -DCONFIG_SILENT_ROAM
 endif
 
 ifneq ($(CONFIG_BCM4359),)
@@ -1656,7 +1697,6 @@ ifeq ($(CONFIG_BCM43013),y)
 endif
  DHDCFLAGS += -DDHD_FW_COREDUMP
  DHDCFLAGS += -DDHD_DUMP_FILE_WRITE_FROM_KERNEL
- DHDCFLAGS += -DDHD_USE_EXTENDED_HANG_REASON
  DHDCFLAGS += -DDHD_LOG_DUMP
  DHDCFLAGS += -DDHD_LOG_PRINT_RATE_LIMIT
 # HANG simulation
@@ -1672,6 +1712,7 @@ endif
  DHDCFLAGS += -DDISCARD_UDPNETBIOS_FLTR
 # Use single nvram file
  DHDCFLAGS += -DDHD_USE_SINGLE_NVRAM_FILE
+ DHDCFLAGS += -DIFACE_HANG_FORCE_DEV_CLOSE
 ifeq ($(CONFIG_NOBLESSE),y)
  DHDCFLAGS += -USUPPORT_P2P_GO_PS
  DHDCFLAGS += -UP2P_LISTEN_OFFLOADING
@@ -1683,7 +1724,6 @@ ifeq ($(CONFIG_NOBLESSE),y)
  DHDCFLAGS += -DENABLE_WAKEUP_PKT_DUMP
  DHDCFLAGS += -DWL_CFGVENDOR_SEND_HANG_EVENT
  DHDCFLAGS += -DNOT_SUPPORT_EXT_TRAP_INFO
- DHDCFLAGS += -DDHD_USE_EXTENDED_HANG_REASON
  DHDCFLAGS += -DDHD_DUMP_MNGR
  DHDCFLAGS += -UDHD_COMMON_DUMP_PATH
  DHDCFLAGS += -DDHD_COMMON_DUMP_PATH="\"/opt/usr/data/network/\""
@@ -1691,14 +1731,23 @@ ifeq ($(CONFIG_NOBLESSE),y)
  DHDCFLAGS += -DDHD_PM_OVERRIDE
  DHDCFLAGS += -DP2P_IF_STATE_EVENT_CTRL
 endif
+ifeq ($(CONFIG_WLAN_MERLOT),y)
+ DHDCFLAGS += -USUPPORT_P2P_GO_PS
+ DHDCFLAGS += -UP2P_LISTEN_OFFLOADING
+ DHDCFLAGS += -DUSE_INITIAL_2G_SCAN
+ DHDCFLAGS += -DENABLE_WAKEUP_PKT_DUMP
+ DHDCFLAGS += -DWL_CFGVENDOR_SEND_HANG_EVENT
+ DHDCFLAGS += -DNOT_SUPPORT_EXT_TRAP_INFO
+ DHDCFLAGS += -DDHD_DUMP_MNGR
+ DHDCFLAGS += -DTSQ_MULTIPLIER=10
+ DHDCFLAGS += -DDHD_PM_OVERRIDE
+ DHDCFLAGS += -DP2P_IF_STATE_EVENT_CTRL
+# Update Tx/Rx rate info
+ DHDCFLAGS += -DWL_RATE_INFO
+endif
   # Remove common feature for 43013
   DHDCFLAGS :=$(filter-out -DROAM_AP_ENV_DETECTION,$(DHDCFLAGS))
   DHDCFLAGS :=$(filter-out -DDISABLE_11H_SOFTAP,$(DHDCFLAGS))
-endif
-
-ifneq ($(CONFIG_BCM43013),)
-  # band lock : auto=0, 5G=1, 2G=2
-  DHDCFLAGS += -DBANDLOCK=2
 endif
 endif # chipset supported SDIO only
 
@@ -1793,6 +1842,13 @@ ifeq ($(CONFIG_ARCH_LAHAINA),y)
   DHDCFLAGS += -Wno-date-time
   DHDCFLAGS += -Wno-sometimes-uninitialized
 endif
+ifeq ($(CONFIG_SOC_EXYNOS9110),y)
+  DHDCFLAGS += -Wno-unused-const-variable
+endif
+ifeq ($(CONFIG_SOC_S5E5515),y)
+  DHDCFLAGS += -Wno-date-time
+  DHDCFLAGS += -Wno-unused-const-variable
+endif
 
 # DTS Support
 ifeq ($(CONFIG_OF),y)
@@ -1873,6 +1929,9 @@ ifeq ($(CONFIG_SOC_EXYNOS9110),y)
 DHDCFLAGS += -DDHD_OF_SUPPORT
 DHDCFLAGS += -Wno-date-time
 endif
+ifeq ($(CONFIG_SOC_S5E5515),y)
+DHDCFLAGS += -DDHD_OF_SUPPORT
+endif
 endif #CONFIG_OF
 
 ifneq ($(CONFIG_ARCH_TEGRA),)
@@ -1935,7 +1994,7 @@ DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o dhd_custom_sec.o 
 	wldev_common.o wl_linux_mon.o wl_roam.o dhd_linux_platdev.o dhd_linux_pktdump.o wl_cfg_btcoex.o \
 	hnd_pktq.o hnd_pktpool.o dhd_custom_cis.o dhd_debug.o dhd_debug_linux.o dhd_mschdbg.o \
 	dhd_dbg_ring.o bcmstdlib_s.o dhd_linux_exportfs.o wl_cfgnan.o bcmbloom.o bcmxtlv.o frag.o \
-	dhd_linux_tx.o
+	dhd_linux_tx.o wl_cfgdbg.o
 
 # This file will be here only for internal builds and sets flags which may
 # affect subsequent behavior. See extended comment within it for details.
