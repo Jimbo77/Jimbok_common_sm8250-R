@@ -9495,7 +9495,6 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 static int __maybe_unused cs40l2x_suspend(struct device *dev)
 {
 	struct cs40l2x_private *cs40l2x = dev_get_drvdata(dev);
-	struct i2c_client *i2c_client = to_i2c_client(dev);
 	int ret = 0;
 
 	dev_info(dev, "Entering cs40l2x_suspend...\n");
@@ -9506,9 +9505,6 @@ static int __maybe_unused cs40l2x_suspend(struct device *dev)
 		return ret;
 	}
 #endif
-
-	disable_irq(i2c_client->irq);
-
 	mutex_lock(&cs40l2x->lock);
 
 	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO
@@ -9542,7 +9538,6 @@ err_mutex:
 static int __maybe_unused cs40l2x_resume(struct device *dev)
 {
 	struct cs40l2x_private *cs40l2x = dev_get_drvdata(dev);
-	struct i2c_client *i2c_client = to_i2c_client(dev);
 	int ret = 0;
 
 #ifdef CONFIG_CS40L2X_SAMSUNG_FEATURE
@@ -9577,8 +9572,6 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
-
-	enable_irq(i2c_client->irq);
 
 	return ret;
 }

@@ -102,3 +102,4 @@ menu "Samsung R8"
 depends on SEC_R8Q_PROJECT
 source "arch/arm64/Kconfig.r8"
 endmenu
+
