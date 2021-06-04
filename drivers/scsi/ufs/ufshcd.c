@@ -12727,7 +12727,7 @@ static ssize_t SEC_UFS_HPB_info_show(struct device *dev, struct device_attribute
 	if (!hpb || !(ufsf->hpb_dev_info.hpb_device))
 		return 0;
 
-	if (ufsf->ufshpb_state == HPB_FAILED)
+	if ((ufsf->ufshpb_state == HPB_FAILED) || (ufsf->ufshpb_state == HPB_NEED_INIT))
 		return 0;
 
 	hit_cnt = atomic64_read(&hpb->hit);

@@ -140,8 +140,6 @@ struct cs40l2x_private {
 #else
 	struct led_classdev led_dev;
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
-	int vibe_start_count;
-	int vibe_done_count;
 };
 
 static const char * const cs40l2x_supplies[] = {
@@ -4934,8 +4932,6 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 			if (ret)
 				return ret;
 
-			cs40l2x->vibe_start_count++;
-
 			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
 			cs40l2x->pbq_index++;
 
@@ -5543,8 +5539,6 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		if (ret)
 			break;
 
-		cs40l2x->vibe_start_count++;
-
 		msleep(CS40L2X_PEAK_DELAY_MS);
 
 		ret = regmap_write(regmap,
@@ -5600,8 +5594,6 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
 				cs40l2x->cp_trailer_index & CS40L2X_INDEX_MASK,
 				CS40L2X_MBOX_TRIGGERRESET);
-
-		cs40l2x->vibe_start_count++;
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
@@ -5617,8 +5609,6 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
 				cs40l2x->cp_trailer_index,
 				CS40L2X_MBOX_TRIGGERRESET);
-
-		cs40l2x->vibe_start_count++;
 		break;
 
 	case CS40L2X_INDEX_PBQ:
@@ -9125,9 +9115,6 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 #endif
 			/* intentionally fall through */
 		case CS40L2X_EVENT_CTRL_GPIO_STOP:
-			cs40l2x->vibe_done_count++;
-			dev_err(cs40l2x->dev, "Vibration Done: %d, %d\n",
-				cs40l2x->vibe_start_count, cs40l2x->vibe_done_count);
 			if (asp_timeout > 0)
 				hrtimer_start(&cs40l2x->asp_timer,
 						ktime_set(asp_timeout / 1000,
@@ -9495,7 +9482,6 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 static int __maybe_unused cs40l2x_suspend(struct device *dev)
 {
 	struct cs40l2x_private *cs40l2x = dev_get_drvdata(dev);
-	struct i2c_client *i2c_client = to_i2c_client(dev);
 	int ret = 0;
 
 	dev_info(dev, "Entering cs40l2x_suspend...\n");
@@ -9506,9 +9492,6 @@ static int __maybe_unused cs40l2x_suspend(struct device *dev)
 		return ret;
 	}
 #endif
-
-	disable_irq(i2c_client->irq);
-
 	mutex_lock(&cs40l2x->lock);
 
 	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO
@@ -9542,7 +9525,6 @@ err_mutex:
 static int __maybe_unused cs40l2x_resume(struct device *dev)
 {
 	struct cs40l2x_private *cs40l2x = dev_get_drvdata(dev);
-	struct i2c_client *i2c_client = to_i2c_client(dev);
 	int ret = 0;
 
 #ifdef CONFIG_CS40L2X_SAMSUNG_FEATURE
@@ -9577,8 +9559,6 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
-
-	enable_irq(i2c_client->irq);
 
 	return ret;
 }
